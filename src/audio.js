@@ -1,47 +1,63 @@
-// ================= صداهای ساده با WebAudio =================
+// ================= صداهای بازی (WebAudio) — کاملاً ضدخطا =================
+// هیچ‌وقت throw نمی‌کند؛ اگر محیط (مثل iframe) صدا را مسدود کند، بی‌صدا ادامه می‌دهیم.
 import { state } from './state.js';
 
 let ctx = null;
+let ctxBroken = false;
+
 function ac() {
+  if (ctxBroken) return null;
   if (!ctx) {
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) return null;
-    ctx = new AC();
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) { ctxBroken = true; return null; }
+      ctx = new AC();
+    } catch (e) {
+      ctxBroken = true;
+      return null;
+    }
   }
+  try {
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+  } catch (e) { /* بی‌خیال */ }
   return ctx;
 }
 
 function tone(freq, dur = 0.12, type = 'sine', gain = 0.16, slideTo = null) {
-  if (!state.sound) return;
-  const a = ac();
-  if (!a) return;
-  if (a.state === 'suspended') a.resume();
-  const o = a.createOscillator();
-  const g = a.createGain();
-  o.type = type;
-  o.frequency.setValueAtTime(freq, a.currentTime);
-  if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, a.currentTime + dur);
-  g.gain.setValueAtTime(gain, a.currentTime);
-  g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + dur);
-  o.connect(g).connect(a.destination);
-  o.start();
-  o.stop(a.currentTime + dur + 0.02);
+  try {
+    if (!state.sound) return;
+    const a = ac();
+    if (!a) return;
+    const t0 = a.currentTime || 0;
+    const o = a.createOscillator();
+    const g = a.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, t0);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(1, slideTo), t0 + dur);
+    g.gain.setValueAtTime(gain, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    o.connect(g).connect(a.destination);
+    o.start(t0);
+    o.stop(t0 + dur + 0.02);
+  } catch (e) { /* صدا مهم نیست */ }
 }
 
 function noise(dur = 0.25, gain = 0.25) {
-  if (!state.sound) return;
-  const a = ac();
-  if (!a) return;
-  const len = Math.floor(a.sampleRate * dur);
-  const buf = a.createBuffer(1, len, a.sampleRate);
-  const d = buf.getChannelData(0);
-  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
-  const src = a.createBufferSource();
-  const g = a.createGain();
-  g.gain.value = gain;
-  src.buffer = buf;
-  src.connect(g).connect(a.destination);
-  src.start();
+  try {
+    if (!state.sound) return;
+    const a = ac();
+    if (!a) return;
+    const len = Math.floor(a.sampleRate * dur);
+    const buf = a.createBuffer(1, len, a.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    const src = a.createBufferSource();
+    const g = a.createGain();
+    g.gain.value = gain;
+    src.buffer = buf;
+    src.connect(g).connect(a.destination);
+    src.start();
+  } catch (e) { /* صدا مهم نیست */ }
 }
 
 export const sfx = {
@@ -56,4 +72,6 @@ export const sfx = {
   },
   ready: () => { tone(659, 0.12, 'triangle', 0.14); setTimeout(() => tone(880, 0.16, 'triangle', 0.14), 100); },
   error: () => tone(180, 0.18, 'square', 0.12, 120),
+  pop: () => tone(520, 0.06, 'triangle', 0.1, 760),
+  whoosh: () => tone(300, 0.12, 'sine', 0.1, 520),
 };

@@ -1,9 +1,17 @@
-// ================= رابط کاربری: HUD، برچسب‌ها، توست‌ها =================
+// ================= رابط کاربری: HUD، فروشگاه کلش‌مانند، کارت‌ها =================
 import { state, addCoins, addDew, addXp, resetGame, save, buildingReady, setBuildingCooldown, cooldownLeft } from './state.js';
-import { LAYOUT, ASSET, ITEMS, TRAY_ORDER, CATEGORIES, CROPS, PRICES, xpForLevel } from './config.js';
+import { LAYOUT, ASSET, ITEMS, TRAY_ORDER, CATEGORIES, CROPS, PRICES, BUY_STEPS, xpForLevel } from './config.js';
 import { sfx } from './audio.js';
 
 const fmt = (n) => Math.round(n).toLocaleString('fa-IR');
+
+// آیکون‌های SVG برای دکمه‌های HUD
+const SVG = {
+  gear: `<svg viewBox="0 0 24 24" class="ico"><path fill="currentColor" d="M19.14 12.94a7.9 7.9 0 0 0 .06-.94 7.9 7.9 0 0 0-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.62l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.2 7.2 0 0 0-1.62-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96a.5.5 0 0 0-.6.22L2.7 8.86a.5.5 0 0 0 .12.62l2.03 1.58a7.9 7.9 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.62l1.92 3.32c.12.22.38.3.6.22l2.39-.96c.49.38 1.03.7 1.62.94l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54a7.2 7.2 0 0 0 1.62-.94l2.39.96c.22.08.48 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.62l-2.03-1.58ZM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2Z"/></svg>`,
+  shop: `<svg viewBox="0 0 24 24" class="ico"><path fill="currentColor" d="M20 4H4v2h16V4zm1 10v-2l-1-5H4l-1 5v2h1v6h10v-6h4v6h2v-6h1zm-9 4H6v-4h6v4z"/></svg>`,
+  mail: `<svg viewBox="0 0 24 24" class="ico"><path fill="currentColor" d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/></svg>`,
+  friends: `<svg viewBox="0 0 24 24" class="ico"><path fill="currentColor" d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>`,
+};
 
 export class UI {
   constructor(world) {
@@ -22,7 +30,7 @@ export class UI {
     const tl = document.createElement('div');
     tl.id = 'hud-topleft';
     tl.innerHTML = `
-      <div class="level-badge" id="level-badge"><span id="level-num">1</span></div>
+      <div class="level-badge" id="level-badge"><span id="level-num">۱</span></div>
       <div class="xp-wrap">
         <div class="xp-bar"><div class="xp-fill" id="xp-fill"></div></div>
         <div class="xp-text" id="xp-text">0 / 500 XP</div>
@@ -33,9 +41,7 @@ export class UI {
     const tr = document.createElement('div');
     tr.id = 'hud-topright';
     tr.innerHTML = `
-      <button class="hud-icon-btn" id="btn-settings" title="تنظیمات">
-        <svg viewBox="0 0 24 24" class="ico"><path fill="currentColor" d="M19.14 12.94a7.9 7.9 0 0 0 .06-.94 7.9 7.9 0 0 0-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.62l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.2 7.2 0 0 0-1.62-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96a.5.5 0 0 0-.6.22L2.7 8.86a.5.5 0 0 0 .12.62l2.03 1.58a7.9 7.9 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.62l1.92 3.32c.12.22.38.3.6.22l2.39-.96c.49.38 1.03.7 1.62.94l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54a7.2 7.2 0 0 0 1.62-.94l2.39.96c.22.08.48 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.62l-2.03-1.58ZM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2Z"/></svg>
-      </button>
+      <button class="hud-icon-btn" id="btn-settings" title="تنظیمات">${SVG.gear}</button>
       <div class="currency-row" id="coins-row">
         <img src="${ASSET('coin.png')}" alt="سکه">
         <span id="coins-val">${fmt(state.coins)}</span>
@@ -45,45 +51,56 @@ export class UI {
         <span id="dew-val">${fmt(state.dew)}</span>
       </div>`;
     document.getElementById('overlay').appendChild(tr);
-    tr.querySelector('#btn-settings').addEventListener('click', () => this.openSettings());
+    tr.querySelector('#btn-settings').addEventListener('click', () => this.safe(() => this.openSettings()));
 
     // پایین راست: فروشگاه / پیام‌ها / دوستان
     const side = document.createElement('div');
     side.id = 'hud-side';
     side.innerHTML = `
       <button class="side-btn" id="btn-mail">
-        <span class="side-ico">✉️</span><span>پیام‌ها</span>
-        <span class="badge" id="mail-badge">3</span>
+        <span class="side-ico">${SVG.mail}</span><span>پیام‌ها</span>
+        <span class="badge" id="mail-badge">۳</span>
       </button>
       <button class="side-btn" id="btn-friends">
-        <span class="side-ico">👥</span><span>دوستان</span>
+        <span class="side-ico">${SVG.friends}</span><span>دوستان</span>
       </button>
       <button class="side-btn gold" id="btn-shop">
-        <span class="side-ico">🏪</span><span>فروشگاه</span>
+        <span class="side-ico">${SVG.shop}</span><span>فروشگاه</span>
       </button>`;
     document.getElementById('overlay').appendChild(side);
-    side.querySelector('#btn-shop').addEventListener('click', () => this.openShop());
-    side.querySelector('#btn-mail').addEventListener('click', () => this.openMail());
-    side.querySelector('#btn-friends').addEventListener('click', () => this.openFriends());
+    side.querySelector('#btn-shop').addEventListener('click', () => this.safe(() => this.openShop()));
+    side.querySelector('#btn-mail').addEventListener('click', () => this.safe(() => this.openMail()));
+    side.querySelector('#btn-friends').addEventListener('click', () => this.safe(() => this.openFriends()));
+  }
+
+  // اجرای امن هندلرها — هیچ خطایی نباید بازی را بکشد
+  safe(fn) {
+    try { fn(); } catch (e) {
+      console.error('[LukoUI]', e);
+      this.toast('خطایی پیش آمد؛ دوباره تلاش کن.');
+    }
   }
 
   refreshHud() {
-    document.getElementById('level-num').textContent = fmt(state.level);
-    const need = xpForLevel(state.level);
-    document.getElementById('xp-fill').style.width = Math.min(100, (state.xp / need) * 100) + '%';
-    document.getElementById('xp-text').textContent = `${fmt(state.xp)} / ${fmt(need)} XP`;
-    document.getElementById('coins-val').textContent = fmt(state.coins);
-    document.getElementById('dew-val').textContent = fmt(state.dew);
-    const unclaimed = state.mails.filter(m => !m.claimed).length;
-    const badge = document.getElementById('mail-badge');
-    badge.textContent = fmt(unclaimed);
-    badge.style.display = unclaimed ? 'block' : 'none';
+    try {
+      document.getElementById('level-num').textContent = fmt(state.level);
+      const need = xpForLevel(state.level);
+      document.getElementById('xp-fill').style.width = Math.min(100, (state.xp / need) * 100) + '%';
+      document.getElementById('xp-text').textContent = `${fmt(state.xp)} / ${fmt(need)} XP`;
+      document.getElementById('coins-val').textContent = fmt(state.coins);
+      document.getElementById('dew-val').textContent = fmt(state.dew);
+      const unclaimed = state.mails.filter(m => !m.claimed).length;
+      const badge = document.getElementById('mail-badge');
+      badge.textContent = fmt(unclaimed);
+      badge.style.display = unclaimed ? 'flex' : 'none';
+    } catch (e) { /* بی‌خیال */ }
   }
 
   bumpCurrencies() {
     this.refreshHud();
     for (const id of ['coins-row', 'dew-row']) {
       const el = document.getElementById(id);
+      if (!el) continue;
       el.classList.remove('bump');
       void el.offsetWidth;
       el.classList.add('bump');
@@ -94,13 +111,15 @@ export class UI {
     sfx.levelup();
     this.toast(`🎉 لول آپ! حالا لول ${fmt(state.level)} هستی — ۱۵۰ سکه جایزه گرفتی!`);
     const badge = document.getElementById('level-badge');
-    badge.classList.remove('bump');
-    void badge.offsetWidth;
-    badge.classList.add('bump');
+    if (badge) {
+      badge.classList.remove('bump');
+      void badge.offsetWidth;
+      badge.classList.add('bump');
+    }
     this.refreshHud();
   }
 
-  // ================= برچسب‌های شناور روی جایگاه‌ها =================
+  // ================= برچسب‌های شناور =================
   showPlotLabel(plotId, x, z, text, y = 1.9) {
     let el = this.plotLabels.get(plotId);
     if (!el) {
@@ -130,13 +149,12 @@ export class UI {
   }
 
   refreshLabels() {
-    for (const [id, el] of this.plotLabels) {
+    for (const [, el] of this.plotLabels) {
       if (el.style.display === 'none') continue;
       this.positionLabel(el, +el.dataset.wx, +el.dataset.wz);
     }
   }
 
-  // متن شناور پس از فروش
   floatText(x, z, text) {
     const el = document.createElement('div');
     el.className = 'float-text';
@@ -183,6 +201,7 @@ export class UI {
   }
 
   updateHoldRing(k, x, z) {
+    if (!this.holdEl) return;
     const fg = this.holdEl.querySelector('#hold-fg');
     fg.style.strokeDashoffset = this.holdCirc * (1 - k);
     const p = this.world.worldToScreen(x, 1.7, z);
@@ -197,6 +216,7 @@ export class UI {
   // ================= توست =================
   toast(msg) {
     const box = document.getElementById('toasts');
+    if (!box) return;
     const el = document.createElement('div');
     el.className = 'toast';
     el.textContent = msg;
@@ -206,7 +226,7 @@ export class UI {
       el.classList.remove('show');
       setTimeout(() => el.remove(), 350);
     }, 3200);
-    while (box.children.length > 3) box.firstChild.remove();
+    while (box.children.length > 3 && box.firstElementChild) box.firstElementChild.remove();
   }
 
   needBuy(itemId) {
@@ -244,15 +264,19 @@ export class UI {
 
       card.querySelector('.buy-btn').addEventListener('click', (e) => {
         e.stopPropagation();
-        this.buyItem(id);
+        this.safe(() => {
+          if (this.buyItem(id)) {
+            this.refreshTray();
+            this.refreshHud();
+          }
+        });
       });
 
-      // درگ کارت
-      card.addEventListener('pointerdown', (e) => this.onCardPointerDown(e, id));
+      card.addEventListener('pointerdown', (e) => this.safe(() => this.onCardPointerDown(e, id)));
     }
 
     tray.querySelector('#tray-prev').addEventListener('click', () => {
-      scroll.scrollBy({ left: 320, behavior: 'smooth' }); // RTL: left = بعدی
+      scroll.scrollBy({ left: 320, behavior: 'smooth' });
     });
     tray.querySelector('#tray-next').addEventListener('click', () => {
       scroll.scrollBy({ left: -320, behavior: 'smooth' });
@@ -272,21 +296,32 @@ export class UI {
     }
   }
 
-  buyItem(id, silent = false) {
+  // جهش کارت بعد از خرید (نشان دادن آمدن آیتم به کارت‌های پایین)
+  pulseCard(itemId) {
+    const card = document.querySelector(`.card[data-item="${itemId}"]`);
+    if (!card) return;
+    card.classList.remove('pop');
+    void card.offsetWidth;
+    card.classList.add('pop');
+  }
+
+  buyItem(id, qty = 1, silent = false) {
     const item = ITEMS[id];
+    const total = item.price * qty;
     const wallet = item.currency === 'dew' ? state.dew : state.coins;
-    if (wallet < item.price) {
+    if (wallet < total) {
       if (!silent) this.toast(item.currency === 'dew' ? 'شبنم کافی نیست!' : 'سکه کافی نیست!');
       sfx.error();
       return false;
     }
-    if (item.currency === 'dew') state.dew -= item.price;
-    else state.coins -= item.price;
-    state.inventory[id] = (state.inventory[id] || 0) + 1;
+    if (item.currency === 'dew') state.dew -= total;
+    else state.coins -= total;
+    state.inventory[id] = (state.inventory[id] || 0) + qty;
     save();
     sfx.buy();
+    this.pulseCard(id);
     if (!silent) {
-      this.toast(`«${item.name}» خریداری شد! ✅`);
+      this.toast(`«${item.name}» ×${fmt(qty)} خریداری شد و به کارت‌های پایین اضافه شد! ✅`);
       this.bumpCurrencies();
       this.refreshTray();
     }
@@ -307,17 +342,16 @@ export class UI {
       this.dragMoved = true;
       ghost.style.left = ev.clientX + 'px';
       ghost.style.top = ev.clientY + 'px';
-      // هایلایت هدف
       const mesh = this.world.pick(ev.clientX, ev.clientY);
       const ground = this.world.pickGround(ev.clientX, ev.clientY);
       if (mesh && mesh.userData.type === 'plot') {
-        this.world.showHighlight(mesh.position.x, mesh.position.z, 1.9);
+        this.world.showPlacementGhost(mesh.position.x, mesh.position.z, 2.4, true);
         this.dropTarget = { plotId: mesh.userData.id.slice(5), point: null };
       } else if (itemId === 'plot' && ground) {
-        this.world.showHighlight(ground.x, ground.z, 2.2, 0xffd070);
+        this.world.showPlacementGhost(ground.x, ground.z, 2.6, true);
         this.dropTarget = { plotId: null, point: ground };
       } else {
-        this.world.hideHighlight();
+        this.world.hidePlacementGhost();
         this.dropTarget = null;
       }
     };
@@ -325,18 +359,16 @@ export class UI {
       document.removeEventListener('pointermove', move);
       document.removeEventListener('pointerup', up);
       ghost.style.display = 'none';
-      this.world.hideHighlight();
+      this.world.hidePlacementGhost();
       const target = this.dropTarget;
       this.dropTarget = null;
       this.dragItem = null;
 
       if (!this.dragMoved) {
-        // کلیک ساده روی کارت = اطلاعات
         this.toast(`«${item.name}» — ${item.desc} (بخر و روی زمین بینداز)`);
         return;
       }
       if (!target) {
-        // انداختن روی هدف نامعتبر
         const mesh = this.world.pick(ev.clientX, ev.clientY);
         if (mesh && mesh.userData.type === 'building') {
           this.toast('این کارت روی ساختمان کار نمی‌کند؛ روی مزرعه بینداز.');
@@ -346,9 +378,8 @@ export class UI {
         sfx.error();
         return;
       }
-      // اگر موجودی نداشت، تلاش برای خودکار خرید
       if ((state.inventory[itemId] || 0) <= 0) {
-        if (!this.buyItem(itemId, true)) {
+        if (!this.buyItem(itemId, 1, true)) {
           this.needBuy(itemId);
           return;
         }
@@ -367,25 +398,22 @@ export class UI {
     // توسط main پر می‌شود
   }
 
-  // ================= فروشگاه (استایل کلش) =================
+  // ================= مودال‌ها =================
   buildModals() {
     const wrap = document.createElement('div');
     wrap.id = 'modal-root';
     wrap.innerHTML = `<div class="modal-backdrop" id="modal-backdrop"></div>`;
     document.getElementById('overlay').appendChild(wrap);
-    wrap.querySelector('#modal-backdrop').addEventListener('click', () => this.closeModal());
+    wrap.querySelector('#modal-backdrop').addEventListener('click', () => this.safe(() => this.closeModal()));
     this.modalRoot = wrap;
-
-    // پنل ساختمان‌ها
-    const b = document.createElement('div');
-    b.className = 'modal panel-building';
-    b.id = 'building-panel';
-    b.style.display = 'none';
-    wrap.appendChild(b);
-    this.buildingPanel = b;
   }
 
   openModal(html, cls = '') {
+    // اگر مودالی باز است، اول ببند
+    if (this.activeModal) {
+      try { this.activeModal.remove(); } catch (e) { /* ok */ }
+      this.activeModal = null;
+    }
     const back = this.modalRoot.querySelector('#modal-backdrop');
     back.style.display = 'block';
     const panel = document.createElement('div');
@@ -394,8 +422,10 @@ export class UI {
     this.modalRoot.appendChild(panel);
     this.activeModal = panel;
     requestAnimationFrame(() => {
-      back.classList.add('show');
-      panel.classList.add('show');
+      try {
+        back.classList.add('show');
+        panel.classList.add('show');
+      } catch (e) { /* ok */ }
     });
     sfx.click();
     return panel;
@@ -403,57 +433,102 @@ export class UI {
 
   closeModal() {
     const back = this.modalRoot.querySelector('#modal-backdrop');
-    back.classList.remove('show');
+    if (back) {
+      back.classList.remove('show');
+      setTimeout(() => { if (!this.activeModal && back) back.style.display = 'none'; }, 220);
+    }
     if (this.activeModal) {
       const p = this.activeModal;
       p.classList.remove('show');
-      setTimeout(() => p.remove(), 220);
+      setTimeout(() => { try { p.remove(); } catch (e) { /* ok */ } }, 220);
       this.activeModal = null;
     }
   }
 
+  // ================= فروشگاه — صفحه‌ی جداگانه به سبک کلش =================
   openShop(category = 'seeds') {
     const panel = this.openModal('', 'panel-shop');
+    this.shopPanel = panel;
     this.renderShop(panel, category);
   }
 
   renderShop(panel, category) {
-    const cats = CATEGORIES.map(c => `
-      <button class="shop-cat ${c.id === category ? 'active' : ''}" data-cat="${c.id}">${c.name}</button>
+    const cats = CATEGORIES.map((c, i) => `
+      <button class="shop-cat ${c.id === category ? 'active' : ''}" data-cat="${c.id}">
+        <span class="shop-cat-ico">${['🏗️', '💧', '🌱'][i] || '🛒'}</span>
+        <span>${c.name}</span>
+      </button>
     `).join('');
+
     const items = Object.values(ITEMS).filter(i => i.category === category).map(i => `
-      <div class="shop-item">
-        <div class="shop-item-img"><img src="${ASSET(i.icon)}" alt="${i.name}"></div>
+      <div class="shop-item" data-shop-item="${i.id}">
+        <div class="shop-item-rarity"></div>
+        <div class="shop-item-img"><img src="${ASSET(i.icon)}" alt="${i.name}" draggable="false"></div>
         <div class="shop-item-name">${i.name}</div>
         <div class="shop-item-desc">${i.desc}</div>
+        <div class="shop-item-have">در کارت‌ها: <b>${fmt(state.inventory[i.id] || 0)}</b></div>
+        <div class="shop-qty">
+          ${BUY_STEPS.map((q, qi) => `
+            <button class="qty-btn ${qi === 0 ? 'active' : ''}" data-qty="${q}" data-for="${i.id}">×${fmt(q)}</button>
+          `).join('')}
+        </div>
         <button class="shop-buy" data-buy="${i.id}">
           <img src="${ASSET(i.currency === 'dew' ? 'Dew.png' : 'coin.png')}" alt="">
-          <span>${fmt(i.price)}</span>
+          <span data-total="${i.id}">${fmt(i.price)}</span>
         </button>
       </div>
     `).join('');
+
     panel.innerHTML = `
       <div class="shop-header">
         <h2>🏪 فروشگاه لوکو</h2>
+        <div class="shop-wallet">
+          <span class="w-coin"><img src="${ASSET('coin.png')}" alt=""> ${fmt(state.coins)}</span>
+          <span class="w-dew"><img src="${ASSET('Dew.png')}" alt=""> ${fmt(state.dew)}</span>
+        </div>
         <button class="modal-close">✕</button>
       </div>
       <div class="shop-body">
         <div class="shop-cats">${cats}</div>
         <div class="shop-grid">${items}</div>
       </div>`;
-    panel.querySelector('.modal-close').addEventListener('click', () => this.closeModal());
+
+    panel.querySelector('.modal-close').addEventListener('click', () => this.safe(() => this.closeModal()));
     panel.querySelectorAll('.shop-cat').forEach(btn => {
-      btn.addEventListener('click', () => this.renderShop(panel, btn.dataset.cat));
+      btn.addEventListener('click', () => this.safe(() => this.renderShop(panel, btn.dataset.cat)));
     });
+
+    // انتخاب تعداد
+    panel.querySelectorAll('.qty-btn').forEach(btn => {
+      btn.addEventListener('click', () => this.safe(() => {
+        const id = btn.dataset.for;
+        panel.querySelectorAll(`.qty-btn[data-for="${id}"]`).forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const item = ITEMS[id];
+        const totalEl = panel.querySelector(`[data-total="${id}"]`);
+        if (totalEl) totalEl.textContent = fmt(item.price * +btn.dataset.qty);
+      }));
+    });
+
+    // خرید
     panel.querySelectorAll('.shop-buy').forEach(btn => {
-      btn.addEventListener('click', () => {
-        if (this.buyItem(btn.dataset.buy)) {
+      btn.addEventListener('click', () => this.safe(() => {
+        const id = btn.dataset.buy;
+        const qtyBtn = panel.querySelector(`.qty-btn[data-for="${id}"].active`);
+        const qty = qtyBtn ? +qtyBtn.dataset.qty : 1;
+        if (this.buyItem(id, qty)) {
           this.refreshTray();
           this.refreshHud();
+          const have = panel.querySelector(`[data-shop-item="${id}"] .shop-item-have b`);
+          if (have) have.textContent = fmt(state.inventory[id] || 0);
+          const wallet = panel.querySelector('.shop-wallet');
+          if (wallet) wallet.innerHTML = `
+            <span class="w-coin"><img src="${ASSET('coin.png')}" alt=""> ${fmt(state.coins)}</span>
+            <span class="w-dew"><img src="${ASSET('Dew.png')}" alt=""> ${fmt(state.dew)}</span>`;
           btn.classList.add('pulse');
           setTimeout(() => btn.classList.remove('pulse'), 350);
         }
-      });
+      }));
     });
   }
 
@@ -476,9 +551,9 @@ export class UI {
       <div class="shop-header"><h2>✉️ پیام‌ها</h2><button class="modal-close">✕</button></div>
       <div class="mail-list">${rows}</div>
     `, 'panel-mail');
-    panel.querySelector('.modal-close').addEventListener('click', () => this.closeModal());
+    panel.querySelector('.modal-close').addEventListener('click', () => this.safe(() => this.closeModal()));
     panel.querySelectorAll('[data-claim]').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', () => this.safe(() => {
         const m = state.mails.find(x => x.id === btn.dataset.claim);
         if (!m || m.claimed) return;
         m.claimed = true;
@@ -491,7 +566,7 @@ export class UI {
         this.closeModal();
         this.openMail();
         this.refreshHud();
-      });
+      }));
     });
     this.refreshHud();
   }
@@ -511,12 +586,12 @@ export class UI {
       <div class="shop-header"><h2>👥 دوستان</h2><button class="modal-close">✕</button></div>
       <div class="mail-list">${rows}</div>
     `, 'panel-mail');
-    panel.querySelector('.modal-close').addEventListener('click', () => this.closeModal());
+    panel.querySelector('.modal-close').addEventListener('click', () => this.safe(() => this.closeModal()));
     panel.querySelectorAll('.friend-visit').forEach((btn, i) => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', () => this.safe(() => {
         this.toast(`بزودی می‌توانی شهر «${state.friends[i].name}» را ببینی! 😉`);
         sfx.click();
-      });
+      }));
     });
   }
 
@@ -529,24 +604,23 @@ export class UI {
           <input type="checkbox" id="sound-toggle" ${state.sound ? 'checked' : ''}>
         </label>
         <button class="danger-btn" id="reset-btn">شروع دوباره‌ی بازی</button>
-        <div class="about">شهر لوکو 🌳 — نسخه‌ی ۱.۰</div>
+        <div class="about">شهر لوکو 🌳 — نسخه‌ی ۱.۱</div>
       </div>
     `, 'panel-settings');
-    panel.querySelector('.modal-close').addEventListener('click', () => this.closeModal());
-    panel.querySelector('#sound-toggle').addEventListener('change', (e) => {
+    panel.querySelector('.modal-close').addEventListener('click', () => this.safe(() => this.closeModal()));
+    panel.querySelector('#sound-toggle').addEventListener('change', (e) => this.safe(() => {
       state.sound = e.target.checked;
       save();
       if (state.sound) sfx.click();
-    });
-    panel.querySelector('#reset-btn').addEventListener('click', () => {
+    }));
+    panel.querySelector('#reset-btn').addEventListener('click', () => this.safe(() => {
       if (confirm('همه‌ی پیشرفت‌ها پاک می‌شود. مطمئنی؟')) resetGame();
-    });
+    }));
   }
 
   // ---------- پنل ساختمان ----------
   openBuilding(building) {
     const ready = buildingReady(building.id);
-    const cd = building.action ? building.action.cooldown : 0;
     const left = cooldownLeft(building.id) / 1000;
     const btnHtml = building.action
       ? `<button class="building-action" id="building-action-btn" ${ready ? '' : 'disabled'}>
@@ -566,11 +640,11 @@ export class UI {
       </div>
     `, 'panel-building');
 
-    panel.querySelector('.modal-close').addEventListener('click', () => this.closeModal());
+    panel.querySelector('.modal-close').addEventListener('click', () => this.safe(() => this.closeModal()));
 
     const actBtn = panel.querySelector('#building-action-btn');
     if (actBtn) {
-      actBtn.addEventListener('click', () => {
+      actBtn.addEventListener('click', () => this.safe(() => {
         if (!buildingReady(building.id)) return;
         const a = building.action;
         if (a.coins) addCoins(a.coins);
@@ -585,32 +659,33 @@ export class UI {
         this.toast(`${building.name}: ${parts.join('، ')}`);
         this.bumpCurrencies();
         this.closeModal();
-      });
+      }));
     }
 
     const focusBtn = panel.querySelector('#building-focus-btn');
     if (focusBtn) {
-      focusBtn.addEventListener('click', () => {
+      focusBtn.addEventListener('click', () => this.safe(() => {
         this.closeModal();
         this.onFocusFarm && this.onFocusFarm();
-      });
+      }));
     }
 
-    // شمارش معکوس زمان آماده‌شدن
     if (!ready && building.action) {
       const tick = setInterval(() => {
-        if (!document.body.contains(panel)) { clearInterval(tick); return; }
-        const l = cooldownLeft(building.id) / 1000;
-        const btn = panel.querySelector('#building-action-btn');
-        if (btn) {
-          if (l <= 0) {
-            btn.disabled = false;
-            btn.textContent = building.action.label;
-            clearInterval(tick);
-          } else {
-            btn.textContent = `⏳ ${Math.ceil(l)} ثانیه`;
+        try {
+          if (!document.body.contains(panel)) { clearInterval(tick); return; }
+          const l = cooldownLeft(building.id) / 1000;
+          const btn = panel.querySelector('#building-action-btn');
+          if (btn) {
+            if (l <= 0) {
+              btn.disabled = false;
+              btn.textContent = building.action.label;
+              clearInterval(tick);
+            } else {
+              btn.textContent = `⏳ ${Math.ceil(l)} ثانیه`;
+            }
           }
-        }
+        } catch (e) { clearInterval(tick); }
       }, 500);
     }
   }

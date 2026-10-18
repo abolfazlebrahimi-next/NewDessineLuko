@@ -205,6 +205,32 @@ export const LAYOUT = {
   starterPlotCells: [5, 6, 7, 8],
 };
 
+// نیم‌قطر تقریبی اشیاء برای جلوگیری از هم‌پوشانی (مثل کلش)
+export function footprintOf(kind, width) {
+  if (kind === 'tree') return { rx: width * 0.32, rz: width * 0.22 };
+  if (kind === 'plot') return { rx: width * 0.42, rz: width * 0.30 };
+  return { rx: width * 0.40, rz: width * 0.22 }; // ساختمان
+}
+
+// ---------- آدمک‌های شهر (مدل‌های Kenney) ----------
+export const CHARACTERS = {
+  count: 6,
+  scale: 0.78,
+  speed: 1.35,          // واحد در ثانیه
+  idleMin: 1.2,
+  idleMax: 3.5,
+  enterChance: 0.42,    // احتمال رفتن به داخل یک ساختمان
+  insideMin: 3.5,
+  insideMax: 8,
+  modelPath: 'Models/GLB format/',
+  variants: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r'],
+  // محدوده‌ی پرسه‌زنی (میدان شهر)
+  wander: { minX: -10.5, maxX: 10.5, minZ: -0.2, maxZ: 8.6 },
+};
+
+// ---------- تعداد خرید گروهی در فروشگاه ----------
+export const BUY_STEPS = [1, 5, 10];
+
 // نام فایل تصاویر وضعیت جایگاه
 export const PLOT_TEX = {
   empty: 'Product1.png',
