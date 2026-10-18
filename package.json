@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "node tests/test-game.mjs && node tests/test-build.mjs && node tests/test-ui.mjs && node tests/test-boot.mjs",
-    "build:single": "vite build --config vite.config.single.mjs && node scripts/make-single.mjs"
+    "build:single": "vite build --config vite.config.single.mjs && node scripts/make-single.mjs && node scripts/verify-single.mjs"
   },
   "repository": {
     "type": "git",
@@ -31,6 +31,7 @@
   },
   "devDependencies": {
     "jsdom": "^30.1.3",
+    "sharp": "^0.35.5",
     "vite": "^5.4.8",
     "vite-plugin-singlefile": "^2.3.4"
   }

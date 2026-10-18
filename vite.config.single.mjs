@@ -11,5 +11,6 @@ export default defineConfig({
     assetsInlineLimit: 100000000,
     cssCodeSplit: false,
     chunkSizeWarningLimit: 100000,
+    modulePreload: false,
   },
 });

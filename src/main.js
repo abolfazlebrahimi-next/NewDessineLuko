@@ -128,6 +128,7 @@ function boot() {
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
+  window.__LUKO_BOOTED__ = true; // به صفحه‌ی لودینگ می‌گوید بازی بالا آمده
 
   // ================= سیستم درگ‌اندراپ و کلیک =================
   let down = null;

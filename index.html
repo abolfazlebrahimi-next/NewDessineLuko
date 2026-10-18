@@ -18,6 +18,23 @@
       if (window.visualViewport) visualViewport.addEventListener('resize', setH);
     })();
   </script>
+  <script>
+    // اگر خطایی موقع بارگذاری رخ داد، متنش روی صفحه‌ی لودینگ دیده شود (نه صفحه‌ی سفید)
+    window.__bootError = null;
+    window.addEventListener('error', function (e) {
+      if (window.__LUKO_BOOTED__ || window.__bootError) return;
+      window.__bootError = (e && e.message) || 'خطا در بارگذاری فایل‌ها';
+      var show = function () {
+        var l = document.getElementById('loading');
+        if (!l) return;
+        l.classList.remove('done');
+        var t = l.querySelector('.loading-inner div');
+        if (t) t.textContent = 'خطایی رخ داد: ' + window.__bootError;
+      };
+      if (document.body) show();
+      else document.addEventListener('DOMContentLoaded', show);
+    }, true);
+  </script>
   <link rel="preload" href="fonts/Vazirmatn-Regular.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/Vazirmatn-Bold.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="styles.css">
@@ -40,13 +57,24 @@
   </div>
   <script type="module" src="src/main.js"></script>
   <script>
-    // حذف صفحه‌ی لودینگ بعد از آماده شدن
-    window.addEventListener('load', () => {
-      setTimeout(() => {
-        const l = document.getElementById('loading');
-        if (l) { l.classList.add('done'); setTimeout(() => l.remove(), 500); }
-      }, 300);
-    });
+    // حذف صفحه‌ی لودینگ فقط وقتی بازی واقعاً بالا آمد؛
+    // اگر طول کشید، به‌جای صفحه‌ی سفید راهنما نشان داده می‌شود
+    (function () {
+      var t0 = Date.now();
+      var iv = setInterval(function () {
+        var l = document.getElementById('loading');
+        if (!l) { clearInterval(iv); return; }
+        if (window.__LUKO_BOOTED__) {
+          clearInterval(iv);
+          l.classList.add('done');
+          setTimeout(function () { l.remove(); }, 500);
+        } else if (!window.__bootError && Date.now() - t0 > 20000) {
+          clearInterval(iv);
+          var t = l.querySelector('.loading-inner div');
+          if (t) t.textContent = 'بارگذاری طول کشید… اگر بازی نیامد، فایل را با مرورگر کروم باز کن و کمی صبر کن.';
+        }
+      }, 250);
+    })();
   </script>
 </body>
 </html>
