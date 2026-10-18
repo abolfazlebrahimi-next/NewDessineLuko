@@ -3,10 +3,13 @@ import * as THREE from 'three';
 import { World } from './world.js';
 import { UI } from './ui.js';
 import { Farm } from './farm.js';
-import { Trees } from './trees.js';
+import { Obstacles } from './obstacles.js';
 import { Characters } from './characters.js';
-import { LAYOUT, TIMING, footprintOf } from './config.js';
-import { state, load, save, setBuildingPos, getBuildingPos, setPlotCell, isCellTaken } from './state.js';
+import { Decor } from './decor.js';
+import { Animals } from './animals.js';
+import { Constructions } from './constructions.js';
+import { LAYOUT, AREAS, footprintOf, isBuildItem } from './config.js';
+import { state, load, save, setBuildingPos, getBuildingPos, setPlotCell } from './state.js';
 import { sfx } from './audio.js';
 
 function boot() {
@@ -14,15 +17,18 @@ function boot() {
   const world = new World(canvas);
   const ui = new UI(world);
   const farm = new Farm(world, ui);
-  const trees = new Trees(world, ui);
-  const characters = new Characters(world);
+  const obstacles = new Obstacles(world, ui);
+  const characters = new Characters(world, ui);
+  const decor = new Decor(world);
+  const animals = new Animals(world);
+  const constructions = new Constructions(world, ui);
+  farm.characters = characters; // مشتری‌ها از آدمک‌های شهر ساخته می‌شوند
 
   // بازیابی ذخیره
   load();
   ui.refreshAll();
 
-  // ---------- ساختمان‌ها (با موقعیت ذخیره‌شده) ----------
-  const buildingByTag = new Map();
+  // ---------- ساختمان‌های شهر (با موقعیت ذخیره‌شده) ----------
   for (const b of LAYOUT.buildings) {
     const pos = getBuildingPos(b.id, b.x, b.z);
     world.addSprite({
@@ -33,34 +39,74 @@ function boot() {
       width: b.w,
       y: 0.02,
     });
-    buildingByTag.set('building:' + b.id, b);
-    const sp = world.getSprite('building:' + b.id);
-    const labelY = sp ? sp.scale.y + 0.35 : 3.5;
-    ui.showPlotLabel('b_' + b.id, pos.x, pos.z, b.name, labelY);
-    const el = ui.plotLabels.get('b_' + b.id);
-    if (el) el.classList.add('building-label');
   }
 
-  // ---------- مزرعه و درخت‌ها ----------
+  // ---------- خانه‌ی مزرعه در صحنه‌ی مزرعه (دروازه‌ی برگشت به شهر) ----------
+  {
+    const fh = LAYOUT.farmhouse;
+    world.addSprite({ tag: 'portal:farmhouse', file: 'Farm.png', x: fh.x, z: fh.z, width: fh.w, y: 0.02 });
+  }
+
+  // ---------- مزرعه، موانع و سازه‌ها ----------
   farm.spawnAllPlots();
-  trees.spawnAll();
+  obstacles.spawnAll();
+  constructions.spawnAll();
 
-  for (const p of state.plots) {
-    if (p.state === 'ready') farm.spawnCustomer(p.id);
+  // ---------- رفت‌وبرگشت بین شهر و مزرعه ----------
+  // نقشه یکپارچه است: با کشیدن روی نقشه هم می‌توانی از شهر به مزرعه بروی
+  // (بینشان جنگل است). ابرها فقط راهِ سریع‌اند.
+  let currentArea = 'town';
+  function syncAreaByCamera() {
+    const key = world.panTarget.z > 40 ? 'farm' : 'town';
+    if (key !== currentArea) {
+      currentArea = key;
+      world.area = AREAS[key];
+      ui.setAreaButton(key);
+    }
+    return key;
   }
+  function goToArea(areaKey) {
+    if (ui.cloudBusy) return;
+    sfx.whoosh();
+    ui.cloudTransition(() => {
+      currentArea = areaKey;
+      world.setArea(areaKey);
+      ui.setAreaButton(areaKey);
+      obstacles.deselect();
+      ui.closeModal();
+      ui.refreshLabels();
+      setTimeout(() => {
+        ui.toast(areaKey === 'farm'
+          ? 'به مزرعه رسیدی! اینجا زمین زیر جنگله؛ درخت و سنگ‌ها رو پاک کن و کشت کن.'
+          : 'به شهر برگشتی!');
+      }, 450);
+    });
+  }
+  ui.onAreaToggle = () => goToArea(world.panTarget.z > 40 ? 'town' : 'farm');
+  ui.onFocusFarm = () => goToArea('farm');
 
   ui.onDropItem = (itemId, target) => {
-    farm.applyItem(itemId, target.plotId, target.point);
+    if (isBuildItem(itemId)) {
+      constructions.placeFromCard(itemId, target.point); // ناحیه از روی نقطه معلوم می‌شود
+    } else {
+      farm.applyItem(itemId, target.plotId, target.point);
+    }
     ui.refreshTray();
     ui.bumpCurrencies();
     ui.refreshLabels();
   };
-  ui.onFocusFarm = () => {
-    world.focusOn(LAYOUT.field.cx, LAYOUT.field.z, 1.25);
+  ui.canPlaceAt = (itemId, point) => {
+    if (itemId === 'plot') return farm.canPlacePlotAt(point);
+    if (isBuildItem(itemId)) return constructions.canPlace(itemId, point);
+    return true;
   };
 
-  // ---------- آدمک‌ها ----------
+  // ---------- مدل‌ها و موجودات ----------
   characters.init().catch((e) => console.warn('characters:', e));
+  obstacles.init().catch((e) => console.warn('obstacles:', e));
+  decor.init().catch((e) => console.warn('decor:', e));
+  animals.init().catch((e) => console.warn('animals:', e));
+  constructions.init().catch((e) => console.warn('constructions:', e));
 
   // ---------- هندل امن حلقه‌ی بازی ----------
   let last = performance.now();
@@ -68,9 +114,10 @@ function boot() {
     try {
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
-      trees.update(dt);
+      obstacles.update(dt);
       farm.update(dt);
       characters.update(dt);
+      animals.update(dt);
       ui.updateFloats(dt);
       ui.refreshLabels();
       world.update(dt);
@@ -85,11 +132,12 @@ function boot() {
   // ================= سیستم درگ‌اندراپ و کلیک =================
   let down = null;
   let panning = false;
-  let dragging = null; // { kind, id, mesh, offset }
-  const rayPoint = new THREE.Vector3();
+  let dragging = null; // { kind, id, mesh, from, target, valid, targetCell }
+  const activePointers = new Map(); // برای زوم دو انگشتی (پینچ) روی موبایل
+  let pinch = null;
+  let pinching = false;
 
   function startMove(d) {
-    // شروع جابجایی یک شیء
     const mesh = d.mesh;
     dragging = {
       kind: mesh.userData.type,
@@ -100,21 +148,52 @@ function boot() {
     panning = false;
     canvas.classList.add('grabbing');
     sfx.whoosh();
-    ui.toast('بکش و در جای مناسب رها کن ✋ (سبز = مجاز)');
+  }
+
+  // شروع درگ یک سازه — سازه‌های هم‌نوعِ چسبیده، با هم می‌آیند
+  function startStructureMove(mesh, ground) {
+    const st = constructions.structureAt(mesh);
+    if (!st) return false;
+    const grabCell = constructions.anchorCellForPoint(ground, st.area);
+    if (!grabCell) return false;
+    const group = constructions.groupOf(st);
+    dragging = {
+      kind: 'structure', st, group, grabCell,
+      delta: { gx: 0, gz: 0 }, valid: true,
+    };
+    panning = false;
+    constructions.lastClick = { id: null, time: 0 }; // درگ، دبل‌کلیک حساب نمی‌شود
+    canvas.classList.add('grabbing');
+    sfx.whoosh();
+    return true;
   }
 
   function moveUpdate(clientX, clientY) {
     if (!dragging) return;
     const ground = world.pickGround(clientX, clientY);
     if (!ground) return;
+
+    if (dragging.kind === 'structure') {
+      const cellNow = constructions.anchorCellForPoint(ground, dragging.st.area);
+      if (!cellNow) return;
+      const dgx = cellNow.gx - dragging.grabCell.gx;
+      const dgz = cellNow.gz - dragging.grabCell.gz;
+      dragging.delta = { gx: dgx, gz: dgz };
+      dragging.valid = constructions.canMoveGroup(dragging.group, dgx, dgz);
+      constructions.previewGroup(dragging.group, dgx, dgz);
+      const b = constructions.groupBounds(dragging.group, dgx, dgz);
+      world.showPlacementGhostRect(b.x, b.z, b.w + 0.35, b.d + 0.35, dragging.valid);
+      return;
+    }
+
     let x = ground.x, z = ground.z;
     let valid = true;
 
     if (dragging.kind === 'plot') {
-      // جایگاه فقط روی سلول‌های مزرعه
       const cell = farm.nearestFreeCell(x, z, dragging.id.slice(5));
       if (cell === null) {
         valid = false;
+        dragging.targetCell = null;
       } else {
         const cp = farm.cellPosition(cell);
         x = cp.x; z = cp.z;
@@ -122,19 +201,17 @@ function boot() {
       }
     } else {
       dragging.targetCell = null;
-      // محدوده‌ی نقشه
-      x = THREE.MathUtils.clamp(x, -13, 13);
-      z = THREE.MathUtils.clamp(z, -6.5, 9.5);
-      // برخورد با بقیه‌ی اشیاء
+      const a = world.area;
+      x = THREE.MathUtils.clamp(x, a.minX, a.maxX);
+      z = THREE.MathUtils.clamp(z, a.minZ, a.maxZ);
       valid = !checkOverlap(dragging.kind, dragging.id, x, z);
     }
 
     dragging.target = { x, z };
     dragging.valid = valid;
-    const size = dragging.kind === 'plot' ? 2.5 : dragging.kind === 'tree' ? 2.6 : 4.4;
+    const size = dragging.kind === 'plot' ? 2.3 : 4.4;
     world.showPlacementGhost(x, z, size, valid);
 
-    // حرکت موقت اسپریت
     const sp = dragging.mesh;
     sp.position.x = x;
     sp.position.z = z;
@@ -144,10 +221,9 @@ function boot() {
   function checkOverlap(kind, selfId, x, z) {
     const w = kind === 'building'
       ? (LAYOUT.buildings.find(b => 'building:' + b.id === selfId)?.w || 3)
-      : kind === 'tree' ? 2.3 : 2.05;
+      : 2.05;
     const fp = footprintOf(kind, w);
 
-    // ساختمان‌ها
     for (const b of LAYOUT.buildings) {
       const tag = 'building:' + b.id;
       if (tag === selfId) continue;
@@ -157,17 +233,15 @@ function boot() {
       if (Math.abs(sp.position.x - x) < fp.rx + bfp.rx - 0.4 &&
           Math.abs(sp.position.z - z) < fp.rz + bfp.rz - 0.3) return true;
     }
-    // درخت‌ها
-    for (const t of state.trees) {
-      const tag = 'tree:' + t.id;
-      if (tag === selfId) continue;
-      const sp = world.getSprite(tag);
-      if (!sp) continue;
-      const tfp = footprintOf('tree', 2.3);
-      if (Math.abs(sp.position.x - x) < fp.rx + tfp.rx - 0.3 &&
-          Math.abs(sp.position.z - z) < fp.rz + tfp.rz - 0.25) return true;
+    for (const ob of state.obstacles) {
+      const ofp = footprintOf(ob.kind, ob.kind === 'tree' ? 1.9 : 1.3);
+      if (Math.abs(ob.x - x) < fp.rx + ofp.rx - 0.25 &&
+          Math.abs(ob.z - z) < fp.rz + ofp.rz - 0.2) return true;
     }
-    // جایگاه‌ها
+    for (const r of constructions.occupiedRects()) {
+      if (Math.abs(r.x - x) < fp.rx + r.rx - 0.2 &&
+          Math.abs(r.z - z) < fp.rz + r.rz - 0.15) return true;
+    }
     for (const p of state.plots) {
       const tag = 'plot:' + p.id;
       if (tag === selfId) continue;
@@ -187,38 +261,38 @@ function boot() {
     world.hidePlacementGhost();
     canvas.classList.remove('grabbing');
 
+    if (d.kind === 'structure') {
+      const dg = d.delta || { gx: 0, gz: 0 };
+      if ((dg.gx || dg.gz) && d.valid && constructions.moveGroup(d.group, dg.gx, dg.gz)) {
+        sfx.pop();
+        ui.toast(d.group.length > 1 ? 'سازه‌ها با هم جابجا شدند!' : 'سازه جابجا شد!');
+      } else {
+        constructions.restoreGroup(d.group);
+        if (dg.gx || dg.gz) {
+          sfx.error();
+          ui.toast('اینجا جای مجازی نیست!');
+        }
+      }
+      save();
+      ui.refreshLabels();
+      return;
+    }
+
     if (!d.valid || !d.target) {
-      // برگرداندن به جای قبلی
       d.mesh.position.x = d.from.x;
       d.mesh.position.z = d.from.z;
       if (d.mesh.userData.shadow) d.mesh.userData.shadow.position.set(d.from.x, 0.03, d.from.z + 0.25);
-      if (d.targetCell === null && d.kind === 'plot') {
-        // noop
-      }
       sfx.error();
       ui.toast('اینجا جای مجازی نیست!');
-      // ریست وضعیت نمایش
       if (d.kind === 'plot') farm.syncPlot(d.id.slice(5));
       return;
     }
 
-    // ثبت جابجایی
     if (d.kind === 'building') {
       const id = d.id.slice(9);
       setBuildingPos(id, d.target.x, d.target.z);
-      ui.hidePlotLabel('b_' + id);
-      const sp = world.getSprite(d.id);
-      const labelY = sp ? sp.scale.y + 0.35 : 3.5;
-      ui.showPlotLabel('b_' + id, d.target.x, d.target.z,
-        (LAYOUT.buildings.find(b => b.id === id) || {}).name || id, labelY);
-      const el = ui.plotLabels.get('b_' + id);
-      if (el) el.classList.add('building-label');
       sfx.pop();
       ui.toast('ساختمان جابجا شد! 🏗️');
-    } else if (d.kind === 'tree') {
-      trees.moveTree(state.trees.find(t => 'tree:' + t.id === d.id), d.target.x, d.target.z);
-      sfx.pop();
-      ui.toast('درخت جابجا شد! 🌳');
     } else if (d.kind === 'plot') {
       const plotId = d.id.slice(5);
       if (d.targetCell !== null && d.targetCell !== undefined) {
@@ -235,26 +309,49 @@ function boot() {
   // ---------- ورودی‌های صفحه ----------
   canvas.addEventListener('pointerdown', (e) => {
     try {
+      // زوم دو انگشتی (پینچ) روی موبایل
+      activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (activePointers.size === 2) {
+        const [p1, p2] = [...activePointers.values()];
+        pinch = { d: Math.hypot(p1.x - p2.x, p1.y - p2.y) || 1, zoom: world.zoom };
+        pinching = true;
+        if (dragging) {
+          if (dragging.kind === 'structure') constructions.restoreGroup(dragging.group);
+          else if (dragging.mesh) {
+            dragging.mesh.position.x = dragging.from.x;
+            dragging.mesh.position.z = dragging.from.z;
+            if (dragging.kind === 'plot') farm.syncPlot(dragging.id.slice(5));
+          }
+          dragging = null;
+        }
+        down = null;
+        panning = false;
+        world.hidePlacementGhost();
+        try { canvas.setPointerCapture(e.pointerId); } catch (_) { /* ok */ }
+        return;
+      }
+
       const mesh = world.pick(e.clientX, e.clientY);
       down = {
         x: e.clientX, y: e.clientY,
         time: performance.now(),
         mesh,
+        ground: world.pickGround(e.clientX, e.clientY),
         moved: false,
       };
-      if (mesh && mesh.userData.type === 'tree') {
-        const tree = trees.treeAt(mesh);
-        if (tree) {
-          trees.startHold(tree);
-          trees.setHover(tree, true); // بازخورد لمس
-        }
-      } else if (mesh && (mesh.userData.type === 'building' || mesh.userData.type === 'plot')) {
-        // آماده برای کلیک یا درگ
-        canvas.setPointerCapture(e.pointerId);
-      } else {
+      const type = mesh && mesh.userData.type;
+      if (type === 'obstacle') {
+        const ob = obstacles.obstacleAt(mesh);
+        if (ob) obstacles.setHover(ob);
         panning = true;
         canvas.setPointerCapture(e.pointerId);
-        canvas.classList.add('grabbing');
+      } else if (type === 'building' || type === 'plot' || type === 'structure') {
+        canvas.setPointerCapture(e.pointerId);
+      } else {
+        // دروازه و زمین خالی: کلیک یا پن دوربین (کشیدن روی کل نقشه)
+        panning = true;
+        canvas.setPointerCapture(e.pointerId);
+        if (!mesh) canvas.classList.add('grabbing');
       }
     } catch (err) {
       console.error('[pointerdown]', err);
@@ -263,12 +360,20 @@ function boot() {
 
   canvas.addEventListener('pointermove', (e) => {
     try {
-      // هاور روی درخت‌ها (وقتی درگ نیست)
+      if (activePointers.has(e.pointerId)) {
+        activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      }
+      if (pinching && pinch && activePointers.size >= 2) {
+        const [p1, p2] = [...activePointers.values()];
+        const nd = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+        if (nd > 10) world.zoomTo(pinch.zoom * (nd / pinch.d));
+        ui.refreshLabels();
+        return;
+      }
+
       if (!down && !dragging) {
         const mesh = world.pick(e.clientX, e.clientY);
-        const tree = mesh ? trees.treeAt(mesh) : null;
-        trees.setHover(tree, true);
-        if (!tree) trees.clearHover();
+        obstacles.setHover(mesh ? obstacles.obstacleAt(mesh) : null);
         canvas.style.cursor = mesh ? 'pointer' : 'grab';
         return;
       }
@@ -283,21 +388,21 @@ function boot() {
       const dy = e.clientY - down.y;
       if (Math.abs(dx) + Math.abs(dy) > 8) down.moved = true;
 
+      const downType = down.mesh && down.mesh.userData.type;
       if (down.mesh && down.moved && !panning &&
-          (down.mesh.userData.type === 'building' || down.mesh.userData.type === 'plot' ||
-           down.mesh.userData.type === 'tree')) {
-        // شروع جابجایی
-        if (trees.hold) { trees.cancelHold(); }
-        startMove(down);
-        moveUpdate(e.clientX, e.clientY);
+          (downType === 'building' || downType === 'plot' || downType === 'structure')) {
+        if (downType === 'structure') {
+          if (!startStructureMove(down.mesh, down.ground)) panning = true;
+        } else {
+          startMove(down);
+        }
+        if (dragging) moveUpdate(e.clientX, e.clientY);
         down.x = e.clientX; down.y = e.clientY;
       } else if (panning && down.moved) {
         world.panBy(dx, dy);
         down.x = e.clientX;
         down.y = e.clientY;
         ui.refreshLabels();
-      } else if (trees.hold && down.moved) {
-        trees.cancelHold();
       }
     } catch (err) {
       console.error('[pointermove]', err);
@@ -306,14 +411,21 @@ function boot() {
 
   const finishPointer = (e) => {
     try {
+      activePointers.delete(e.pointerId);
+      if (pinching) {
+        // پایان ژست دو انگشتی کلیک حساب نمی‌شود
+        if (activePointers.size === 0) { pinching = false; pinch = null; }
+        down = null;
+        panning = false;
+        return;
+      }
       if (dragging) {
         endMove();
         down = null;
         return;
       }
       if (!down) return;
-      if (trees.hold) trees.cancelHold();
-      trees.clearHover();
+      obstacles.clearHover();
       canvas.classList.remove('grabbing');
       try { canvas.releasePointerCapture(e.pointerId); } catch (_) { /* ok */ }
 
@@ -325,24 +437,39 @@ function boot() {
         if (type === 'building') {
           const id = down.mesh.userData.id.slice(9);
           const b = LAYOUT.buildings.find(x => x.id === id);
-          if (b) {
+          if (b && b.portal) {
+            // کلیک روی مزرعه = ابرها می‌آیند و می‌روی به صحنه‌ی مزرعه
+            goToArea(b.portal);
+          } else if (b) {
             sfx.click();
             world.focusOn(down.mesh.position.x, down.mesh.position.z + 1.5, 1.12);
             ui.openBuilding(b);
           }
+        } else if (type === 'portal') {
+          goToArea('town');
         } else if (type === 'plot') {
           farm.interactPlot(down.mesh.userData.id.slice(5));
-        } else if (type === 'tree') {
-          // کلیک کوتاه = تکان + راهنما
-          const tree = trees.treeAt(down.mesh);
-          if (tree) {
-            world.shakeSprite('tree:' + tree.id, 1.4);
-            ui.toast('برای گرفتن شبنم، ۵ ثانیه نگه‌دار! 💧');
-            sfx.pop();
-          }
+        } else if (type === 'obstacle') {
+          const ob = obstacles.obstacleAt(down.mesh);
+          if (ob) obstacles.interact(ob);
+        } else if (type === 'structure') {
+          const st = constructions.structureAt(down.mesh);
+          if (st) constructions.interact(st);
+          ui.refreshTray();
+        }
+      } else if (isClick && !down.mesh) {
+        // پاک‌کردن درخت/سنگ/علف جنگل با یک کلیک (برای بازکردن راه و جاده)
+        const ground = world.pickGround(e.clientX, e.clientY);
+        const rec = decor.tryRemoveAt(e.clientX, e.clientY, ground);
+        if (rec) {
+          world.explode(rec.x, 0.5, rec.z, rec.type === 'rock' ? 0xbfc7cc : 0x7fc95a);
+          sfx.boom();
+        } else {
+          obstacles.deselect();
         }
       }
 
+      syncAreaByCamera(); // اگر با کشیدن نقشه به سمت دیگر رفتی، دکمه هم عوض شود
       down = null;
       panning = false;
     } catch (err) {
@@ -357,7 +484,7 @@ function boot() {
 
   canvas.addEventListener('pointerleave', () => {
     try {
-      trees.clearHover();
+      obstacles.clearHover();
     } catch (e) { /* ok */ }
   });
 
@@ -375,16 +502,10 @@ function boot() {
     if (e.target === canvas) e.preventDefault();
   }, { passive: false });
 
-  // خوش‌آمد
+  // خوش‌آمد (کوتاه و بی‌سروصدا)
   setTimeout(() => {
-    ui.toast('به شهر لوکو خوش آمدی! 🌳 روی ساختمان‌ها کلیک کن و مزرعه‌ات را بساز.');
+    ui.toast('به شهر لوکو خوش آمدی! سکه‌ات فعلاً بی‌نهایت است.');
   }, 600);
-  setTimeout(() => {
-    ui.toast('نکته: درخت را ۵ ثانیه نگه دار تا بترکد و شبنم بگیری! 💧');
-  }, 4200);
-  setTimeout(() => {
-    ui.toast('همه‌ی ساختمان‌ها، درخت‌ها و جایگاه‌ها را می‌توانی بکشی و جابجا کنی! ✋');
-  }, 9000);
 }
 
 if (document.readyState === 'loading') {

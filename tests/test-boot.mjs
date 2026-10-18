@@ -87,7 +87,11 @@ function makeGL() {
         return 4096;
       };
       if (prop === 'getExtension') return () => null;
-      if (prop === 'getProgramParameter') return () => true;
+      if (prop === 'getProgramParameter') return (prog, param) => {
+        // شمارنده‌های یونیفرم/اتریبیوت باید عدد باشند، بقیه (مثل LINK_STATUS) بولین
+        if (param === t.ACTIVE_UNIFORMS || param === t.ACTIVE_ATTRIBUTES) return 0;
+        return true;
+      };
       if (prop === 'getShaderParameter') return () => true;
       if (prop === 'getProgramInfoLog' || prop === 'getShaderInfoLog') return () => '';
       if (prop === 'getUniformLocation') return () => ({});
@@ -165,7 +169,7 @@ window.addEventListener('error', (e) => errors.push('onerror: ' + e.message));
 
 console.log('--- بوت برنامه ---');
 try {
-  await import('./src/main.js');
+  await import('../src/main.js');
 } catch (e) {
   console.log('import main.js خطا داد:', e.stack || e);
 }
