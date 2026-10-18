@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>شهر لوکو 🌳</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="assets/coin.png">
+</head>
+<body>
+  <div id="game">
+    <canvas id="scene"></canvas>
+    <div id="overlay">
+      <div id="labels"></div>
+      <div id="toasts"></div>
+      <div id="drag-ghost"></div>
+    </div>
+  </div>
+  <div id="loading">
+    <div class="loading-inner">
+      <img src="assets/coin.png" alt="" class="loading-coin">
+      <div>در حال ساخت شهر لوکو…</div>
+    </div>
+  </div>
+  <script type="module" src="src/main.js"></script>
+  <script>
+    // حذف صفحه‌ی لودینگ بعد از آماده شدن
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        const l = document.getElementById('loading');
+        if (l) { l.classList.add('done'); setTimeout(() => l.remove(), 500); }
+      }, 300);
+    });
+  </script>
+</body>
+</html>

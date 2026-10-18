@@ -1,0 +1,6 @@
+node_modules/
+dist/
+_design_ref.png
+_design_gen.jpg
+*.log
+.DS_Store
