@@ -432,6 +432,14 @@ function boot() {
       const elapsed = performance.now() - down.time;
       const isClick = !down.moved && elapsed < 600;
 
+      // حالت «کارت انتخاب شده»: ضربه روی زمین یعنی همان‌جا بگذار
+      if (isClick && ui.placingItem) {
+        ui.tryPlaceSelected(e.clientX, e.clientY);
+        down = null;
+        panning = false;
+        return;
+      }
+
       if (isClick && down.mesh) {
         const type = down.mesh.userData.type;
         if (type === 'building') {

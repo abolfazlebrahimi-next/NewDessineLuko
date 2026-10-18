@@ -4,6 +4,7 @@
 // (cow.glb و...)؛ وگرنه حیوان مکعبی با کد ساخته می‌شود — هم‌سبک آدمک‌ها.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { sharedManager } from './loader.js';
 import { clone as skeletonClone } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { ANIMALS, LAYOUT } from './config.js';
 
@@ -20,7 +21,7 @@ export class Animals {
     this.world = world;
     this.group = new THREE.Group();
     this.world.scene.add(this.group);
-    this.loader = new GLTFLoader();
+    this.loader = new GLTFLoader(sharedManager);
     this.animals = [];
     this.ready = false;
   }

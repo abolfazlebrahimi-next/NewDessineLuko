@@ -182,6 +182,10 @@ export function load() {
     if (TEST_MODE.infiniteMoney) {
       state.coins = INFINITE_BALANCE;
       state.dew = INFINITE_BALANCE;
+    } else {
+      // ذخیره‌های دوران «پول بی‌نهایت» به موجودی شروع برگردند تا اقتصاد واقعی باشد
+      if (state.coins >= INFINITE_BALANCE) state.coins = START.coins;
+      if (state.dew >= INFINITE_BALANCE) state.dew = START.dew;
     }
     if (Array.isArray(data.removedDecor)) {
       state.removedDecor = data.removedDecor.filter(n => Number.isFinite(n));

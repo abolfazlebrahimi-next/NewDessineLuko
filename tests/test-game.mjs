@@ -82,12 +82,14 @@ check('چهار حیوان مزرعه تعریف شدن',
 check('حیوان‌ها از آدمک کوتاه‌ترند', Object.values(ANIMALS.kinds).every(k => k.height < CHARACTERS.height));
 check('جای شروع سازه‌ای ساخته نشده', Array.isArray(state.structures) && state.structures.length === 0);
 
-// حالت تست: سکه بی‌نهایت
-check('حالت تست فعال است (پول بی‌نهایت)', TEST_MODE.infiniteMoney === true);
-check('با پول بی‌نهایت هر خریدی ممکن است', canAfford('coins', 10 ** 12) && canAfford('dew', 10 ** 12));
+// اقتصاد واقعی: سکه و شبنم محدودند
+check('اقتصاد واقعی فعال است (پول محدود)', TEST_MODE.infiniteMoney === false);
+check('خرید گران‌تر از موجودی ممکن نیست', !canAfford('coins', 10 ** 12) && !canAfford('dew', 10 ** 12));
+check('موجودی شروع برای شروع بازی کافی است', state.coins >= 1000 && state.dew >= 50);
 {
   const before = state.coins;
-  check('خرج‌کردن از سکه‌ی بی‌نهایت کم نمی‌کند', spend('coins', 5000) === true && state.coins === before);
+  check('خرج‌کردن از سکه کم می‌کند', spend('coins', 100) === true && state.coins === before - 100);
+  check('خرج بیشتر از موجودی رد می‌شود', spend('coins', 10 ** 9) === false);
 }
 
 // نقشه‌ی یکپارچه: دوربین می‌تواند از شهر تا مزرعه کشیده شود

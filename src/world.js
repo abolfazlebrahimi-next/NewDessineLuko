@@ -1,6 +1,7 @@
 // ================= جهان بازی با Three.js =================
 import * as THREE from 'three';
 import { ASSET, AREAS, MAP_BOUNDS } from './config.js';
+import { sharedManager } from './loader.js';
 
 const VIEW_HEIGHT = 15.2;      // ارتفاع دید ارتوگرافیک
 const CAM_POS = new THREE.Vector3(0, 13.5, 11.8);
@@ -13,7 +14,8 @@ export class World {
   constructor(canvas) {
     this.canvas = canvas;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    const isTouch = 'ontouchstart' in window || (window.matchMedia && matchMedia('(pointer: coarse)').matches);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isTouch ? 1.6 : 2));
     this.renderer.setClearColor(0x7ec850, 1);
 
     this.scene = new THREE.Scene();
@@ -27,7 +29,7 @@ export class World {
     this.camera.position.copy(CAM_POS);
     this.camera.lookAt(CAM_TARGET);
 
-    this.loader = new THREE.TextureLoader();
+    this.loader = new THREE.TextureLoader(sharedManager);
     this.texCache = new Map();
     this.clickables = [];        // برای ری‌کست
     this.byTag = new Map();      // tag -> mesh
@@ -46,6 +48,7 @@ export class World {
     this.pointerNdc = new THREE.Vector2();
 
     window.addEventListener('resize', () => this.resize());
+    if (window.visualViewport) visualViewport.addEventListener('resize', () => this.resize());
     this.resize();
   }
 

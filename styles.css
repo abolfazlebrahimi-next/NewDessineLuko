@@ -71,7 +71,13 @@ html, body {
   touch-action: none;
 }
 
-#game { position: relative; width: 100vw; height: 100vh; height: 100dvh; overflow: hidden; }
+#game {
+  position: fixed; inset: 0;
+  width: 100%;
+  height: 100vh; height: 100dvh;
+  height: var(--app-h, 100dvh);
+  overflow: hidden;
+}
 #scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
 #scene.grabbing { cursor: grabbing; }
 #overlay { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
@@ -95,7 +101,7 @@ html, body {
 
 /* ================= HUD (الهام از کلش آف کلنز) ================= */
 #hud-topleft {
-  position: absolute; top: 10px; left: 10px;
+  position: absolute; top: calc(10px + env(safe-area-inset-top, 0px)); left: max(10px, env(safe-area-inset-left, 0px));
   display: flex; align-items: flex-start; gap: 9px;
 }
 .profile-frame {
@@ -148,7 +154,7 @@ html, body {
 
 /* نوارهای منابع بالا راست — مثل کلش */
 #hud-topright {
-  position: absolute; top: 10px; right: 10px;
+  position: absolute; top: calc(10px + env(safe-area-inset-top, 0px)); right: max(10px, env(safe-area-inset-right, 0px));
   display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
 }
 .res-bar {
@@ -192,7 +198,7 @@ html, body {
 
 /* دکمه‌های مربعی کرمی لبه‌ی چپ */
 #hud-left {
-  position: absolute; left: 10px; top: 104px;
+  position: absolute; left: max(10px, env(safe-area-inset-left, 0px)); top: 104px;
   display: flex; flex-direction: column; gap: 8px;
 }
 .side-btn {
@@ -232,7 +238,7 @@ html, body {
 }
 .big-cta:active { transform: translateY(3px); }
 .area-cta {
-  left: 12px; bottom: 114px;
+  left: max(12px, env(safe-area-inset-left, 0px)); bottom: 114px;
   background: linear-gradient(#a5e88f, #57b83e);
   border: 3px solid #35791f;
   box-shadow: 0 5px 0 #35791f, 0 10px 16px rgba(0,0,0,.32), inset 0 2px 0 rgba(255,255,255,.5);
@@ -240,7 +246,7 @@ html, body {
 }
 .area-cta:active { box-shadow: 0 2px 0 #35791f, 0 5px 8px rgba(0,0,0,.3); }
 .shop-cta {
-  right: 12px; bottom: 114px;
+  right: max(12px, env(safe-area-inset-right, 0px)); bottom: 114px;
   background: linear-gradient(#ffe27a, #f7b733);
   border: 3px solid #b97a1e;
   box-shadow: 0 5px 0 #9a6414, 0 10px 16px rgba(0,0,0,.32), inset 0 2px 0 rgba(255,255,255,.55);
@@ -411,8 +417,16 @@ html, body {
 .buy-btn:active { transform: scale(.94); }
 
 /* ================= درگ ================= */
+/* کارت انتخاب‌شده (حالت «بزن و بگذار») */
+.card.selected {
+  border-color: #57b83e !important;
+  box-shadow: 0 0 0 3px rgba(87, 184, 62, .6), 0 10px 16px rgba(0,0,0,.35);
+  transform: translateY(-6px) scale(1.05);
+}
+
 #drag-ghost {
-  position: fixed; z-index: 300;
+  position: fixed; left: 0; top: 0; z-index: 300;
+  will-change: transform;
   transform: translate(-50%, -50%); /* آفست لمسی در JS اعمال می‌شود */
   display: none;
   flex-direction: column; align-items: center;
@@ -501,24 +515,39 @@ html, body {
 
 /* ================= توست ================= */
 #toasts {
-  position: absolute; top: 96px; left: 50%;
+  position: absolute; top: calc(84px + env(safe-area-inset-top, 0px)); left: 50%;
   transform: translateX(-50%);
   display: flex; flex-direction: column; align-items: center; gap: 8px;
-  width: min(560px, 90vw);
+  width: min(560px, 92vw);
+  z-index: 200;
 }
 .toast {
-  background: rgba(58, 36, 18, 0.92);
+  pointer-events: auto;
+  display: flex; align-items: center; gap: 10px;
+  max-width: 100%;
+  background: rgba(58, 36, 18, 0.94);
   color: #ffefd0;
   border: 2px solid var(--gold-dark);
   border-radius: 14px;
-  padding: 9px 18px;
+  padding: 8px 10px 8px 14px;
   font-size: 14.5px; font-weight: 700;
   opacity: 0; transform: translateY(-12px);
   transition: all .3s ease;
   box-shadow: 0 6px 16px rgba(0,0,0,.35);
-  text-align: center;
 }
 .toast.show { opacity: 1; transform: translateY(0); }
+.toast-msg { flex: 1; text-align: center; }
+.toast-x {
+  flex: 0 0 auto;
+  width: 26px; height: 26px; border-radius: 9px;
+  background: linear-gradient(#ff7a6b, #d62f26);
+  border: 2px solid #8f1d16;
+  color: #fff; font-size: 13px; font-weight: 900; line-height: 1;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.toast-x:active { transform: scale(.9); }
+.toast.sticky { border-color: #57b83e; background: rgba(28, 62, 20, 0.95); }
 
 /* ================= مودال‌ها ================= */
 #modal-root { position: absolute; inset: 0; z-index: 100; pointer-events: none; }
@@ -542,12 +571,22 @@ html, body {
   border-radius: 22px;
   box-shadow: 0 20px 50px rgba(0,0,0,.5);
   width: min(860px, 92vw);
-  max-height: 82vh;
+  max-height: calc(var(--app-h, 100dvh) * .88);
   overflow: hidden;
   display: flex; flex-direction: column;
   pointer-events: auto;
 }
 .modal.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+
+/* صفحه‌ی تمام‌صفحه مثل بازی‌های موبایل: کل صفحه را می‌گیرد، شناور نیست */
+.modal.panel-full {
+  top: 0; left: 0; right: 0; bottom: 0;
+  width: auto; height: auto;
+  max-height: none;
+  border: none; border-radius: 0;
+  transform: translateY(16px);
+}
+.modal.panel-full.show { transform: translateY(0); }
 
 .shop-header {
   display: flex; align-items: center; justify-content: space-between;
@@ -570,20 +609,14 @@ html, body {
 
 /* ===== فروشگاه — به سبک کلش آف کلنز ===== */
 .panel-shop {
-  width: min(980px, 96vw);
-  height: min(670px, 94dvh);
-  max-height: 94dvh;
   background: #efe9dc;
-  border: 4px solid #17130e;
-  border-radius: 20px;
-  box-shadow: 0 24px 60px rgba(0,0,0,.6);
 }
 /* نوار مشکی بالا: زبانه‌های آیکونی وسط + ضربدر قرمز گوشه */
 .shop-topbar {
   position: relative; flex: 0 0 auto;
   background: #17130e;
   display: flex; align-items: center; justify-content: center;
-  padding: 9px 56px; min-height: 64px;
+  padding: calc(9px + env(safe-area-inset-top, 0px)) 56px 9px; min-height: 64px;
 }
 .shop-topbar .modal-close {
   position: absolute; inset-inline-end: 10px; top: 50%;
@@ -625,7 +658,8 @@ html, body {
   border-bottom: 3px solid #d8c8a4;
   text-shadow: 0 1px 0 #fff;
 }
-.shop-body { flex: 1; min-height: 0; padding: 12px; display: flex; }
+.shop-body { flex: 1; min-height: 0; padding: 12px; display: flex; justify-content: center; }
+.shop-body .shop-grid { max-width: 1500px; }
 
 /* گرید آیتم‌ها روی پنل تیره‌ی فرورفته */
 .shop-grid {
@@ -766,7 +800,7 @@ html, body {
   flex: 0 0 auto;
   background: linear-gradient(#8ee06f, #57b83e);
   border-top: 3px solid #3f8f2c;
-  padding: 9px 10px;
+  padding: 9px 10px calc(9px + env(safe-area-inset-bottom, 0px));
   display: flex; justify-content: center; gap: 14px;
 }
 .shop-wallet span {
@@ -822,13 +856,28 @@ html, body {
 }
 .item-info-back:active { transform: translateY(2px); box-shadow: 0 2px 0 #245c2e; }
 
-/* پیام‌ها و دوستان */
-.mail-list {
-  padding: 14px;
-  overflow-y: auto;
-  display: flex; flex-direction: column; gap: 10px;
-  background: linear-gradient(#fdf3dc, #f0e2c2);
+/* پیام‌ها و دوستان — صفحه‌ی تمام‌صفحه */
+.panel-mail { background: linear-gradient(#fdf3dc, #efdfba); }
+.panel-mail .shop-header {
+  background: #17130e;
+  border-bottom: 3px solid #000;
+  padding-top: calc(10px + env(safe-area-inset-top, 0px));
 }
+.panel-mail .modal-close {
+  width: 44px; height: 44px; border-radius: 13px;
+  background: linear-gradient(#ff7a6b, #d62f26);
+  border: 2.5px solid #8f1d16; font-size: 20px;
+  box-shadow: inset 0 2px 0 rgba(255,255,255,.4), 0 3px 0 #7c1710;
+}
+.mail-list {
+  flex: 1;
+  min-height: 0;
+  padding: 14px 12px calc(14px + env(safe-area-inset-bottom, 0px));
+  overflow-y: auto;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  background: transparent;
+}
+.panel-mail .mail-row, .panel-mail .friend-row { width: min(680px, 100%); }
 .mail-row, .friend-row {
   background: #fff;
   border: 3px solid var(--wood);
@@ -988,19 +1037,20 @@ html, body {
   .tray-empty { font-size: 12px; }
 
   /* توست و برچسب */
-  #toasts { top: 70px; width: 94vw; }
-  .toast { font-size: 12px; padding: 7px 12px; }
+  #toasts { top: calc(66px + env(safe-area-inset-top, 0px)); width: 94vw; }
+  .toast { font-size: 12px; padding: 6px 8px 6px 10px; }
+  .toast-x { width: 24px; height: 24px; font-size: 12px; }
   .plot-label { font-size: 11px; padding: 2px 8px; }
   .plot-label.chat-bubble { font-size: 11px; max-width: 150px; }
 
   /* مودال‌ها تقریباً تمام‌صفحه */
-  .modal { width: 96vw; max-height: 88dvh; border-radius: 16px; }
+  .modal { width: 96vw; max-height: calc(var(--app-h, 100dvh) * .92); border-radius: 16px; }
   .shop-header { padding: 9px 12px; flex-wrap: wrap; gap: 6px; }
   .shop-header h2 { font-size: 16px; }
   .modal-close { width: 34px; height: 34px; font-size: 15px; }
 
   /* فروشگاه موبایل: تمام‌صفحه مثل کلش */
-  .panel-shop { width: 100vw; height: 100dvh; max-height: 100dvh; border-radius: 0; border: none; }
+  .panel-shop { width: auto; height: auto; } /* تمام‌صفحه از panel-full می‌آید */
   .shop-topbar { padding: 7px 52px; min-height: 56px; }
   .shop-topbar .modal-close { width: 40px; height: 40px; font-size: 18px; }
   .shop-cat { width: 46px; height: 43px; border-radius: 11px; }

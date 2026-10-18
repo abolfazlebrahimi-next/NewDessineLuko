@@ -307,20 +307,36 @@ export class UI {
     });
   }
 
-  // ================= توست =================
-  toast(msg) {
+  // ================= پیغام بالای صفحه (با دکمه‌ی ✕) =================
+  toast(msg, opts = {}) {
     const box = document.getElementById('toasts');
-    if (!box) return;
+    if (!box) return () => {};
     const el = document.createElement('div');
     el.className = 'toast';
-    el.textContent = msg;
+    el.innerHTML = `<span class="toast-msg"></span><button class="toast-x" aria-label="بستن پیغام">✕</button>`;
+    el.querySelector('.toast-msg').textContent = msg;
     box.appendChild(el);
-    setTimeout(() => el.classList.add('show'), 16);
-    setTimeout(() => {
+    requestAnimationFrame(() => el.classList.add('show'));
+    let gone = false;
+    let timer = null;
+    const dismiss = () => {
+      if (gone) return;
+      gone = true;
+      if (timer) clearTimeout(timer);
       el.classList.remove('show');
-      setTimeout(() => el.remove(), 350);
-    }, 3200);
-    while (box.children.length > 3 && box.firstElementChild) box.firstElementChild.remove();
+      setTimeout(() => el.remove(), 300);
+      if (opts.onClose) { try { opts.onClose(); } catch (e) { /* ok */ } }
+    };
+    el.querySelector('.toast-x').addEventListener('click', (ev) => { ev.stopPropagation(); dismiss(); });
+    if (!opts.sticky) timer = setTimeout(dismiss, opts.ms || 3400);
+    // حداکثر سه پیغام هم‌زمان؛ قدیمی‌ترین غیرچسبان حذف می‌شود
+    while (box.children.length > 3) {
+      const first = box.querySelector('.toast:not(.sticky)') || box.firstElementChild;
+      if (!first || first === el) break;
+      first.remove();
+    }
+    if (opts.sticky) el.classList.add('sticky');
+    return dismiss;
   }
 
   needBuy(itemId) {
@@ -355,6 +371,8 @@ export class UI {
 
     this.trayScroll = tray.querySelector('#tray-scroll');
     this._traySignature = null;
+    this.placingItem = null;
+    this._placeToastOff = null;
 
     // با موس: غلتک = اسکرول افقی سینی؛ کشیدن روی فضای خالی سینی = اسکرول
     this.trayScroll.addEventListener('wheel', (e) => {
@@ -406,6 +424,7 @@ export class UI {
       const card = document.createElement('div');
       card.className = 'card';
       card.dataset.item = id;
+      if (this.placingItem === id) card.classList.add('selected');
       card.innerHTML = `
         <div class="card-title">${item.name}</div>
         <div class="card-count" data-count="${id}">${fmt(state.inventory[id] || 0)}</div>
@@ -467,54 +486,139 @@ export class UI {
     return true;
   }
 
-  // ---------- درگ‌اندراپ کارت‌ها ----------
+  // ---------- گذاشتن کارت: درگ، یا «انتخاب کن و روی زمین بزن» ----------
+
+  // هدف کارت در یک نقطه‌ی صفحه (مشترک بین درگ و ضربه روی زمین)
+  computeDropTarget(itemId, px, py) {
+    const mesh = this.world.pick(px, py);
+    if (mesh && mesh.userData.type === 'plot' && !isGroundItem(itemId)) {
+      return { target: { plotId: mesh.userData.id.slice(5), point: null }, ok: true, mesh, ground: null };
+    }
+    const ground = this.world.pickGround(px, py);
+    if (isGroundItem(itemId) && ground) {
+      const ok = this.canPlaceAt ? this.canPlaceAt(itemId, ground) !== false : true;
+      return { target: { plotId: null, point: ground }, ok, mesh, ground };
+    }
+    return { target: null, ok: false, mesh, ground };
+  }
+
+  _updateDragGhost(itemId, px, py) {
+    const r = this.computeDropTarget(itemId, px, py);
+    if (r.target && r.target.plotId && r.mesh) {
+      this.world.showPlacementGhost(r.mesh.position.x, r.mesh.position.z, 2.4, true);
+    } else if (r.target && r.ground) {
+      // سبز = جای مجاز، قرمز = جای نامجاز
+      this.world.showPlacementGhost(r.ground.x, r.ground.z, ITEMS[itemId].ghost || 2.2, r.ok);
+    } else {
+      this.world.hidePlacementGhost();
+    }
+    this.dropTarget = r.target;
+    return r;
+  }
+
+  _markSelectedCard() {
+    document.querySelectorAll('.card[data-item]').forEach(c => {
+      c.classList.toggle('selected', c.dataset.item === this.placingItem);
+    });
+  }
+
+  // انتخاب کارت با یک ضربه؛ بعد روی زمین هرجا بزنی همان‌جا گذاشته می‌شود
+  selectForPlacement(itemId) {
+    this.cancelPlacement();
+    this.placingItem = itemId;
+    this._markSelectedCard();
+    const item = ITEMS[itemId];
+    this._placeToastOff = this.toast(`«${item.name}» انتخاب شد — روی زمین، هرجا می‌خواهی بگذاری همان‌جا بزن.`, {
+      sticky: true,
+      onClose: () => { if (this.placingItem === itemId) this.cancelPlacement(); },
+    });
+    sfx.click();
+  }
+
+  cancelPlacement() {
+    this.placingItem = null;
+    this._markSelectedCard();
+    if (this._placeToastOff) {
+      const off = this._placeToastOff;
+      this._placeToastOff = null;
+      off();
+    }
+  }
+
+  // ضربه روی بوم وقتی کارتی انتخاب است (از main صدا زده می‌شود)
+  tryPlaceSelected(clientX, clientY) {
+    const itemId = this.placingItem;
+    if (!itemId) return false;
+    const r = this.computeDropTarget(itemId, clientX, clientY);
+    if (!r.target) {
+      if (r.mesh && r.mesh.userData.type === 'building') {
+        this.toast('این کارت روی ساختمان کار نمی‌کند؛ روی زمین بزن.');
+      } else {
+        this.toast(isGroundItem(itemId) ? 'روی زمین خالی بزن تا گذاشته شود.' : 'روی یک جایگاه کشت بزن.');
+      }
+      sfx.error();
+      return true;
+    }
+    if ((state.inventory[itemId] || 0) <= 0) {
+      this.needBuy(itemId);
+      this.cancelPlacement();
+      return true;
+    }
+    this.onDropItem(itemId, r.target);
+    // اگر هنوز از آن آیتم داری، انتخاب می‌ماند تا چندتا پشت‌سرهم بگذاری (مثل حصار)
+    if ((state.inventory[itemId] || 0) <= 0) this.cancelPlacement();
+    else this._markSelectedCard();
+    return true;
+  }
+
   onCardPointerDown(e, itemId) {
     e.preventDefault();
     const ghost = document.getElementById('drag-ghost');
     const item = ITEMS[itemId];
-    ghost.innerHTML = `${this.itemIconHtml(item)}<span>${item.name}</span>`;
-    ghost.style.display = 'flex';
-    // روی لمسی، کارت بالای انگشت شناور می‌شود و همان‌جا هم می‌افتد
-    this.dragOffY = e.pointerType === 'touch' ? -74 : 0;
+    // روی لمسی کارت و نقطه‌ی افتادن بالای انگشت‌اند تا جای گذاشتن دیده شود
+    this.dragOffY = e.pointerType === 'touch' ? -92 : 0;
     this.dragItem = itemId;
     this.dragMoved = false;
+    this.dropTarget = null;
+    const startX = e.clientX, startY = e.clientY;
+    let rafId = 0, lastX = e.clientX, lastY = e.clientY;
+    const paintGhost = () => {
+      rafId = 0;
+      const px = lastX, py = lastY + (this.dragOffY || 0);
+      ghost.style.transform = `translate(${px}px, ${py}px) translate(-50%, -50%)`;
+      this._updateDragGhost(itemId, px, py);
+    };
     const move = (ev) => {
-      this.dragMoved = true;
-      const px = ev.clientX;
-      const py = ev.clientY + (this.dragOffY || 0);
-      ghost.style.left = px + 'px';
-      ghost.style.top = py + 'px';
-      const mesh = this.world.pick(px, py);
-      const ground = this.world.pickGround(px, py);
-      if (mesh && mesh.userData.type === 'plot' && !isGroundItem(itemId)) {
-        this.world.showPlacementGhost(mesh.position.x, mesh.position.z, 2.4, true);
-        this.dropTarget = { plotId: mesh.userData.id.slice(5), point: null };
-      } else if (isGroundItem(itemId) && ground) {
-        // کارت‌های زمینی (جایگاه/حصار/دیوار/چادر/خانه): سبز = جای مجاز، قرمز = نه
-        const ok = this.canPlaceAt ? this.canPlaceAt(itemId, ground) : true;
-        this.world.showPlacementGhost(ground.x, ground.z, item.ghost || 2.2, ok !== false);
-        this.dropTarget = { plotId: null, point: ground };
-      } else {
-        this.world.hidePlacementGhost();
-        this.dropTarget = null;
+      lastX = ev.clientX; lastY = ev.clientY;
+      if (!this.dragMoved) {
+        // لرزش کوچک انگشت «درگ» حساب نمی‌شود
+        if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < 11) return;
+        this.dragMoved = true;
+        ghost.innerHTML = `${this.itemIconHtml(item)}<span>${item.name}</span>`;
+        ghost.style.display = 'flex';
       }
+      // ری‌کست فقط یک‌بار در هر فریم — بدون لگ
+      if (!rafId) rafId = requestAnimationFrame(paintGhost);
     };
     const up = (ev) => {
       document.removeEventListener('pointermove', move);
       document.removeEventListener('pointerup', up);
+      document.removeEventListener('pointercancel', up);
+      if (rafId) cancelAnimationFrame(rafId);
       ghost.style.display = 'none';
-      this.world.hidePlacementGhost();
-      const target = this.dropTarget;
-      this.dropTarget = null;
       this.dragItem = null;
-
       if (!this.dragMoved) {
-        this.toast(`«${item.name}» — ${item.desc}`);
+        this.world.hidePlacementGhost();
+        // ضربه‌ی ساده روی کارت = حالت گذاشتن با ضربه روی زمین
+        if (this.placingItem === itemId) this.cancelPlacement();
+        else this.selectForPlacement(itemId);
         return;
       }
-      if (!target) {
-        const mesh = this.world.pick(ev.clientX, ev.clientY + (this.dragOffY || 0));
-        if (mesh && mesh.userData.type === 'building') {
+      const r = this._updateDragGhost(itemId, ev.clientX, ev.clientY + (this.dragOffY || 0));
+      this.world.hidePlacementGhost();
+      this.dropTarget = null;
+      if (!r.target) {
+        if (r.mesh && r.mesh.userData.type === 'building') {
           this.toast('این کارت روی ساختمان کار نمی‌کند؛ روی مزرعه بینداز.');
         } else {
           this.toast('اینجا نمی‌توانی بیندازی؛ روی جایگاه کشت بینداز.');
@@ -526,12 +630,12 @@ export class UI {
         this.needBuy(itemId);
         return;
       }
-      this.onDropItem(itemId, target);
+      this.cancelPlacement();
+      this.onDropItem(itemId, r.target);
     };
-    ghost.style.left = e.clientX + 'px';
-    ghost.style.top = (e.clientY + (this.dragOffY || 0)) + 'px';
     document.addEventListener('pointermove', move);
     document.addEventListener('pointerup', up);
+    document.addEventListener('pointercancel', up);
   }
 
   onDropItem(itemId, target) {
@@ -587,7 +691,7 @@ export class UI {
 
   // ================= فروشگاه — صفحه‌ی جداگانه به سبک کلش =================
   openShop(category = 'seeds') {
-    const panel = this.openModal('', 'panel-shop');
+    const panel = this.openModal('', 'panel-shop panel-full');
     this.shopPanel = panel;
     this.renderShop(panel, category);
   }
@@ -748,7 +852,7 @@ export class UI {
     const panel = this.openModal(`
       <div class="shop-header"><h2>پیام‌ها</h2><button class="modal-close">✕</button></div>
       <div class="mail-list">${rows}</div>
-    `, 'panel-mail');
+    `, 'panel-mail panel-full');
     panel.querySelector('.modal-close').addEventListener('click', () => this.safe(() => this.closeModal()));
     panel.querySelectorAll('[data-claim]').forEach(btn => {
       btn.addEventListener('click', () => this.safe(() => {
@@ -783,7 +887,7 @@ export class UI {
     const panel = this.openModal(`
       <div class="shop-header"><h2>دوستان</h2><button class="modal-close">✕</button></div>
       <div class="mail-list">${rows}</div>
-    `, 'panel-mail');
+    `, 'panel-mail panel-full');
     panel.querySelector('.modal-close').addEventListener('click', () => this.safe(() => this.closeModal()));
     panel.querySelectorAll('.friend-visit').forEach((btn, i) => {
       btn.addEventListener('click', () => this.safe(() => {

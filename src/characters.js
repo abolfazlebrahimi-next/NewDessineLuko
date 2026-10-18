@@ -9,6 +9,7 @@
 // وگرنه آدمک مکعبی با کد ساخته می‌شود.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { sharedManager } from './loader.js';
 import { clone as skeletonClone } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { CHARACTERS, LAYOUT, CHAT_DIALOGUES, CUSTOMER_LINES, STRUCTURES } from './config.js';
 import { state, getBuildingPos, cellPosition } from './state.js';
@@ -41,7 +42,7 @@ export class Characters {
     this.ui = ui;
     this.group = new THREE.Group();
     this.world.scene.add(this.group);
-    this.loader = new GLTFLoader();
+    this.loader = new GLTFLoader(sharedManager);
     this.people = [];
     this.templates = [];      // [{ scene, animations }]
     this.tplCursor = 0;

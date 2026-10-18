@@ -2,8 +2,22 @@
 <html lang="fa" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>شهر لوکو 🌳</title>
+  <script>
+    // ارتفاع واقعیِ قابل‌دید روی موبایل؛ نوار آدرس مرورگر پایین صفحه را قطع نکند
+    (function () {
+      var root = document.documentElement;
+      function setH() {
+        var h = window.visualViewport ? visualViewport.height : window.innerHeight;
+        root.style.setProperty('--app-h', h + 'px');
+      }
+      setH();
+      window.addEventListener('resize', setH);
+      window.addEventListener('orientationchange', setH);
+      if (window.visualViewport) visualViewport.addEventListener('resize', setH);
+    })();
+  </script>
   <link rel="preload" href="fonts/Vazirmatn-Regular.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/Vazirmatn-Bold.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="styles.css">

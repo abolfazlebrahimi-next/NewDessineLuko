@@ -5,6 +5,7 @@
 // کلیک روی حصار/دیوار = چرخش ۹۰ درجه، دوبار کلیک سریع = برداشتن (برگشت به کارت‌ها).
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { sharedManager } from './loader.js';
 import { STRUCTURES, MAP_BOUNDS, LAYOUT, ITEMS } from './config.js';
 import {
   state, addStructure, removeStructure, getStructure,
@@ -18,7 +19,7 @@ export class Constructions {
   constructor(world, ui) {
     this.world = world;
     this.ui = ui;
-    this.loader = new GLTFLoader();
+    this.loader = new GLTFLoader(sharedManager);
     this.templates = {};       // kindId -> scene
     this.modelsReady = false;
     this.modelsFailed = false;

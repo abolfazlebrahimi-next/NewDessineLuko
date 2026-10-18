@@ -5,6 +5,7 @@
 // اگر بارگذاری نشدند، خودکار از تصاویر دوبعدی استفاده می‌شود.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { sharedManager } from './loader.js';
 import { OBSTACLES, TIMING, REWARDS, LAYOUT } from './config.js';
 import {
   state, addObstacle, removeObstacle, makeWildObstacle, cellPosition,
@@ -27,7 +28,7 @@ export class Obstacles {
     this.selected = null;       // { id, until }
     this.hovered = null;
     this.regrowTimer = 0;
-    this.loader = new GLTFLoader();
+    this.loader = new GLTFLoader(sharedManager);
     this._transparentTex = null;
     this._rockTex = null;
   }

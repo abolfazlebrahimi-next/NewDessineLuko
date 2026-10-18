@@ -4,3 +4,6 @@ _design_ref.png
 _design_gen.jpg
 *.log
 .DS_Store
+
+dist-single/
+Luko-Game.html

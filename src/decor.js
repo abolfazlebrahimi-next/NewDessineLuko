@@ -4,6 +4,7 @@
 // و بر اساس نوار عمق (z) گروه‌بندی شده‌اند تا ترتیب نمایش با بقیه درست بماند.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { sharedManager } from './loader.js';
 import { OBSTACLES, STRUCTURES, LAYOUT, FARM_CENTER } from './config.js';
 import { state, markDecorRemoved } from './state.js';
 
@@ -41,7 +42,7 @@ const PROP_SPECS = [
 export class Decor {
   constructor(world) {
     this.world = world;
-    this.loader = new GLTFLoader();
+    this.loader = new GLTFLoader(sharedManager);
     this.group = new THREE.Group();
     this.world.scene.add(this.group);
     this.ready = false;

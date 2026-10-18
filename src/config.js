@@ -1,6 +1,12 @@
 // ================= پیکربندی کلی بازی شهر لوکو =================
 
-export const ASSET = (f) => `assets/${f}`;
+// در بیلد تک‌فایل، همه‌ی فایل‌ها داخل خود HTML هستند و از این نقشه خوانده می‌شوند
+export function assetUrl(path) {
+  const map = globalThis.__ASSET_MAP__;
+  if (map && map[path]) return map[path];
+  return path;
+}
+export const ASSET = (f) => assetUrl(`assets/${f}`);
 
 // ---------- نقشه‌ی یکپارچه: شهر در شمال، مزرعه در جنوب ----------
 // با کشیدن انگشت/موس روی نقشه می‌توانی آزادانه از شهر تا مزرعه حرکت کنی
@@ -31,8 +37,8 @@ export const FARM_CENTER = { x: 0, z: 75 };
 
 // ---------- حالت تست ----------
 // فعلاً برای تست راحت همه‌ی امکانات، سکه و شبنم نامحدود است.
-// برای برگرداندن اقتصاد واقعی کافی است infiniteMoney را false کنی.
-export const TEST_MODE = { infiniteMoney: true };
+// اقتصاد واقعی: سکه و شبنم محدودند و باید با فروش محصول و جایزه به‌دست بیایند.
+export const TEST_MODE = { infiniteMoney: false };
 export const INFINITE_BALANCE = 999999999;
 
 // هر آیتمی که خریده باشی را می‌توانی در فروشگاه با این نسبتِ قیمت خرید بفروشی
