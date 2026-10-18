@@ -2,14 +2,26 @@
 
 export const ASSET = (f) => `assets/${f}`;
 
-// ---------- ابعاد نقشه (بزرگ‌تر از قبل) ----------
-export const MAP = {
-  minX: -17, maxX: 17,
-  minZ: -8, maxZ: 16.5,
-  // محدوده‌ی حرکت دوربین
-  panMinX: -15, panMaxX: 15,
-  panMinZ: -6, panMaxZ: 12,
+// ---------- دو صحنه‌ی بازی: شهر و مزرعه ----------
+// مزرعه دیگر داخل صفحه‌ی شهر نیست؛ با کلیک روی ساختمان مزرعه
+// ابرها می‌آیند و وارد فضای جدا و مخصوص مزرعه می‌شوی.
+export const AREAS = {
+  town: {
+    id: 'town', name: 'شهر',
+    minX: -17, maxX: 17, minZ: -8, maxZ: 16.5,
+    panMinX: -15, panMaxX: 15, panMinZ: -6, panMaxZ: 12,
+    focus: { x: 0, z: 2.2, zoom: 1.0 },
+  },
+  farm: {
+    id: 'farm', name: 'مزرعه',
+    minX: -17, maxX: 17, minZ: 58, maxZ: 92,
+    panMinX: -15, panMaxX: 15, panMinZ: 62, panMaxZ: 86,
+    focus: { x: 0, z: 75, zoom: 0.9 },
+  },
 };
+
+// مرکز صحنه‌ی مزرعه (برای چیدن دکور، حصار حیوانات و...)
+export const FARM_CENTER = { x: 0, z: 75 };
 
 // ---------- اقتصاد ----------
 export const PRICES = {
@@ -19,6 +31,7 @@ export const PRICES = {
   fertilizer: 80,
   wateringCan: 10,     // آب‌پاش کامل — با شبنم
   seeds: { carrot: 120, wheat: 100, cabbage: 150, eggplant: 180 },
+  build: { fence: 60, wall: 130, tent: 450, house: 1600 },
 };
 
 export const SELL_PRICES = {
@@ -106,8 +119,8 @@ export function xpForLevel(level) {
 export const ITEMS = {
   plot: {
     id: 'plot', name: 'جایگاه کشت', icon: 'Product1.png',
-    price: PRICES.plot, currency: 'coins', category: 'plots',
-    desc: 'یک جایگاه کشت جدید برای مزرعه‌ات بساز.',
+    price: PRICES.plot, currency: 'coins', category: 'plots', place: 'ground', ghost: 2.2,
+    desc: 'یک جایگاه کشت جدید برای مزرعه‌ات بساز (فقط در صفحه‌ی مزرعه).',
   },
   soil: {
     id: 'soil', name: 'خاک کشاورزی', icon: 'Agriculturalsoil.png',
@@ -149,19 +162,64 @@ export const ITEMS = {
     price: PRICES.seeds.eggplant, currency: 'coins', category: 'seeds', crop: 'eggplant',
     desc: 'دانه‌ی بادمجان برای کاشت.',
   },
+  // ---------- ساخت‌وساز (از پکیج مدل دوم) ----------
+  fence: {
+    id: 'fence', name: 'حصار چوبی', emoji: '🚧', icon: null,
+    price: PRICES.build.fence, currency: 'coins', category: 'build', place: 'ground', ghost: 1.25,
+    desc: 'یک تکه حصار. کنار هم بچسبانشان تا دور مزرعه یا حیاط دیوار بکشی. روی حصار ساخته‌شده کلیک کن تا بچرخد؛ دوبار سریع کلیک = برداشتن.',
+  },
+  wall: {
+    id: 'wall', name: 'دیوار', emoji: '🧱', icon: null,
+    price: PRICES.build.wall, currency: 'coins', category: 'build', place: 'ground', ghost: 1.25,
+    desc: 'یک تکه دیوار بلند و محکم برای دیوارکشی دور هرجا که دوست داری.',
+  },
+  tent: {
+    id: 'tent', name: 'چادر', emoji: '⛺', icon: null,
+    price: PRICES.build.tent, currency: 'coins', category: 'build', place: 'ground', ghost: 2.3,
+    desc: 'یک چادر قشنگ برای تزیین مزرعه یا شهر (۲×۲ خانه).',
+  },
+  house: {
+    id: 'house', name: 'خانه‌ی چوبی', emoji: '🏠', icon: null,
+    price: PRICES.build.house, currency: 'coins', category: 'build', place: 'ground', ghost: 3.3,
+    desc: 'یک خانه‌ی چوبی با سقف، برای ساختن محله‌ی خودت (۳×۳ خانه).',
+  },
 };
 
 // ترتیب کارت‌ها در سینی پایین
 export const TRAY_ORDER = [
   'plot', 'soil', 'water', 'fertilizer', 'wateringCan',
   'carrotSeed', 'wheatSeed', 'cabbageSeed', 'eggplantSeed',
+  'fence', 'wall', 'tent', 'house',
 ];
 
 export const CATEGORIES = [
   { id: 'plots', name: 'جایگاه کشت' },
   { id: 'care', name: 'آب و کود' },
   { id: 'seeds', name: 'دانه‌ها' },
+  { id: 'build', name: 'ساخت‌وساز' },
 ];
+
+// ---------- سازه‌های قابل ساختن (مدل‌ها در public/models/build) ----------
+export const STRUCTURES = {
+  basePath: 'models/build/',
+  cell: 1.04, // اندازه‌ی خانه‌ی شبکه‌ی ساخت — سازه‌ها کامل به هم می‌چسبند
+  kinds: {
+    fence: { model: 'fence.glb', cells: 1, targetH: 0.52, rotatable: true, pieces: 2 },
+    wall: { model: 'metal-panel.glb', cells: 1, targetW: 1.04, rotatable: true, pieces: 1 },
+    tent: { model: 'tent.glb', cells: 2, targetW: 1.55, rotatable: false, pieces: 1 },
+    house: { model: 'structure-roof.glb', cells: 3, targetW: 2.6, rotatable: false, pieces: 1 },
+  },
+};
+
+// آیتم‌هایی که روی زمین انداخته می‌شوند (نه روی جایگاه)
+export function isGroundItem(itemId) {
+  const it = ITEMS[itemId];
+  return !!it && it.place === 'ground';
+}
+export function isBuildItem(itemId) {
+  const it = ITEMS[itemId];
+  return !!it && it.category === 'build';
+}
 
 // ---------- چیدمان شهر (پخش‌شده روی نقشه‌ی بزرگ) ----------
 export const LAYOUT = {
@@ -193,54 +251,71 @@ export const LAYOUT = {
     {
       id: 'farm', name: 'مزرعه', tex: 'Farm.png',
       x: 10.8, z: 1.4, w: 4.9,
-      desc: 'مزرعه‌ی لوکو! جنوب شهر پر از زمین‌های کشت است؛ اول درخت‌ها و سنگ‌ها را با سکه پاک کن تا زمین باز شود.',
+      desc: 'ورودی مزرعه‌ی لوکو! رویش کلیک کن تا ابرها بیایند و بروی به فضای مخصوص مزرعه؛ آنجا زمین زیر جنگل است و باید با سکه پاکش کنی.',
       action: null,
+      portal: 'farm', // کلیک روی این ساختمان = انتقال ابری به صحنه‌ی مزرعه
     },
   ],
-  // زمین کشت بزرگ جنوب شهر: ۸ × ۵ = ۴۰ سلول.
-  // بیشتر سلول‌ها اول بازی با درخت/سنگ بسته‌اند و باید با سکه پاک شوند.
+  // زمین کشت در صحنه‌ی جدا و مخصوص مزرعه است (جنوب نقشه، دور از شهر):
+  // ۱۰ × ۷ = ۷۰ سلول با فاصله‌ی چسبیده به هم تا جایگاه‌ها کامل به هم بچسبند.
+  // بیشتر سلول‌ها اول بازی زیر جنگل انبوه درخت و سنگ‌اند و باید با سکه پاک شوند.
   field: {
-    cx: 0, cz: 9.2,
-    cols: 8, rows: 5,
-    spacing: 2.45,
+    cx: 0, cz: 76,
+    cols: 10, rows: 7,
+    spacing: 2.08, // پهنای جایگاه ۲.۰۵ است، پس جایگاه‌ها تقریباً بدون فاصله کنار هم می‌نشینند
   },
   // سلول‌هایی که از اول بازند (ردیف اول وسط + کمی از ردیف دوم)
-  starterClearedCells: [1, 2, 3, 4, 5, 6, 10, 11, 12, 13],
+  starterClearedCells: [2, 3, 4, 5, 6, 7, 13, 14, 15, 16],
   // جایگاه‌های اولیه‌ی بازی — ۴ جایگاه روی ردیف اول زمین
-  starterPlotCells: [2, 3, 4, 5],
-  // جای درخت‌ها و سنگ‌های وحشی دور شهر (بیرون زمین کشت)
-  wildSpots: [
+  starterPlotCells: [3, 4, 5, 6],
+  // جای درخت‌ها و سنگ‌های وحشی دور شهر (قابل پاک‌کردن با سکه)
+  wildSpotsTown: [
     { x: -15.6, z: -5.4 }, { x: -14.2, z: -1.8 }, { x: -15.8, z: 2.4 }, { x: -14.4, z: 6.2 },
-    { x: -15.6, z: 10.2 }, { x: -14.2, z: 13.8 }, { x: -12.6, z: -6.2 }, { x: -12.2, z: 9.4 },
+    { x: -15.6, z: 10.2 }, { x: -14.2, z: 13.8 }, { x: -12.6, z: -6.2 }, { x: -12.9, z: 9.4 },
     { x: 15.6, z: -5.4 }, { x: 14.2, z: -1.6 }, { x: 15.8, z: 2.6 }, { x: 14.4, z: 6.4 },
-    { x: 15.6, z: 10.4 }, { x: 14.2, z: 14.0 }, { x: 12.6, z: -6.2 }, { x: 12.2, z: 9.6 },
+    { x: 15.6, z: 10.4 }, { x: 14.2, z: 14.0 }, { x: 12.6, z: -6.2 }, { x: 12.9, z: 9.6 },
     { x: -6.4, z: -6.6 }, { x: -2.2, z: -7.0 }, { x: 2.4, z: -6.8 }, { x: 6.6, z: -6.6 },
     { x: -7.5, z: 15.9 }, { x: -2.8, z: 16.1 }, { x: 2.6, z: 15.8 }, { x: 7.4, z: 16.0 },
-    { x: -11.8, z: 4.6 }, { x: 11.8, z: 4.8 }, { x: -5.4, z: -6.0 }, { x: 5.2, z: -6.1 },
+    { x: -13.9, z: 4.6 }, { x: 13.9, z: 4.8 }, { x: -5.4, z: -6.0 }, { x: 5.2, z: -6.1 },
+    { x: -13.2, z: -4.4 }, { x: 13.2, z: -4.2 }, { x: -11.4, z: 14.8 }, { x: 11.5, z: 15.0 },
   ],
+  // جای درخت‌ها و سنگ‌های وحشی دور زمین در صحنه‌ی مزرعه (حلقه‌ی جنگلی دور مزرعه)
+  wildSpotsFarm: [
+    { x: -12.4, z: 64.8 }, { x: -8.2, z: 64.2 }, { x: -3.4, z: 64.6 }, { x: 1.8, z: 64.2 },
+    { x: 6.4, z: 64.7 }, { x: 11.2, z: 64.3 }, { x: -14.6, z: 68.4 }, { x: -14.2, z: 73.6 },
+    { x: -14.8, z: 78.8 }, { x: -14.3, z: 83.6 }, { x: -11.8, z: 86.2 }, { x: -6.6, z: 86.6 },
+    { x: -1.2, z: 86.3 }, { x: 4.6, z: 86.7 }, { x: 9.8, z: 86.2 }, { x: -12.6, z: 70.2 },
+    { x: -12.2, z: 81.4 }, { x: 12.8, z: 67.2 }, { x: -15.8, z: 66.2 }, { x: -15.4, z: 85.4 },
+    { x: 7.8, z: 63.4 }, { x: -9.6, z: 63.2 }, { x: 2.2, z: 63.6 }, { x: -4.4, z: 63.3 },
+  ],
+  // خانه‌ی مزرعه در صحنه‌ی مزرعه (کلیک روی آن = برگشت به شهر با ابرها)
+  farmhouse: { x: -8.6, z: 66.4, w: 5.2 },
+  // آغل حیوانات در شرق زمین
+  animalPen: { minX: 11.6, maxX: 16.2, minZ: 71.5, maxZ: 79.5 },
 };
 
 // ---------- موانع: درخت‌ها و سنگ‌های پکیج جدید (Kenney Survival Kit) ----------
 export const OBSTACLES = {
   basePath: 'models/nature/', // فایل‌های GLB در public/models/nature
   models: {
-    tree: ['tree.glb', 'tree-tall.glb', 'tree-autumn.glb'],
+    tree: ['tree.glb', 'tree-tall.glb', 'tree-autumn.glb', 'tree-autumn-tall.glb'],
     rock: ['rock-a.glb', 'rock-b.glb', 'rock-c.glb'],
     grass: ['grass.glb', 'grass-large.glb'],
   },
-  treeHeight: 1.95,   // ارتفاع هدف درخت سه‌بعدی (کوتاه‌تر از خانه‌ها)
-  rockWidth: 1.25,    // پهنای هدف سنگ
+  treeHeight: 2.1,    // ارتفاع هدف درخت سه‌بعدی (کوتاه‌تر از خانه‌ها)
+  rockWidth: 1.3,     // پهنای هدف سنگ
   grassHeight: 0.5,   // بوته‌های تزیینی دور نقشه
-  initialWild: 16,    // چند مانع وحشی اول بازی دور شهر باشد
-  maxWild: 22,
-  regrowEvery: 38,    // هر چند ثانیه احتمال رویش یک درخت وحشی تازه
+  initialWildTown: 22, // مانع وحشی اول بازی دور شهر
+  initialWildFarm: 20, // مانع وحشی اول بازی دور مزرعه
+  maxWild: 52,
+  regrowEvery: 34,    // هر چند ثانیه احتمال رویش یک درخت وحشی تازه
 };
 
-// هزینه‌ی پاک‌کردن مانع با سکه — هرچه از زمین باز دورتر، گران‌تر
+// هزینه‌ی پاک‌کردن مانع با سکه — هرچه از زمین باز دورتر، کمی گران‌تر (با سقف)
 export function obstacleCost(kind, ringDist = 1, typeIdx = 0) {
-  const d = Math.max(1, ringDist);
-  if (kind === 'rock') return 170 + d * 60;
-  return 100 + d * 45 + (typeIdx === 1 ? 40 : 0); // درخت بلند کمی گران‌تر
+  const d = Math.min(5, Math.max(1, ringDist));
+  if (kind === 'rock') return 150 + d * 55;
+  return 90 + d * 40 + (typeIdx === 1 || typeIdx === 3 ? 40 : 0); // درخت بلند کمی گران‌تر
 }
 
 // نیم‌قطر تقریبی اشیاء برای جلوگیری از هم‌پوشانی (مثل کلش)
@@ -256,22 +331,37 @@ export function footprintOf(kind, width) {
 // خودکار استفاده می‌شوند؛ وگرنه آدمک‌های مکعبیِ ساخته‌شده با کد می‌آیند.
 // در هر دو حالت قد آدمک دقیقاً روی height تنظیم می‌شود تا از خانه‌ها کوچک‌تر باشد.
 export const CHARACTERS = {
-  count: 8,             // تعداد اهالی شهر
+  count: 6,             // تعداد اهالی شهر
+  farmCount: 3,         // چند نفر هم همیشه در مزرعه پرسه می‌زنند
   height: 0.95,         // قد آدمک (خانه‌ها ۳ تا ۵ واحدند!)
   speed: 1.5,           // واحد در ثانیه
   idleMin: 1.2,
   idleMax: 3.5,
-  enterChance: 0.35,    // احتمال رفتن به داخل یک ساختمان
+  enterChance: 0.35,    // احتمال رفتن به داخل یک ساختمان (فقط اهالی شهر)
   insideMin: 3.5,
   insideMax: 8,
   modelPath: 'models/characters/',
   variants: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'],
-  // محدوده‌ی پرسه‌زنی اهالی (میدان وسط شهر، بین ساختمان‌ها و مزرعه)
+  // محدوده‌ی پرسه‌زنی هر صحنه
   wander: { minX: -12.5, maxX: 12.5, minZ: -0.6, maxZ: 3.2 },
+  wanderFarm: { minX: -11.5, maxX: 10.5, minZ: 63.8, maxZ: 68.2 },
   // گپ‌وگفت دو نفره: هر چند ثانیه یک بار دو نفر کنار هم می‌ایستند و حرف می‌زنند
   chat: { everyMin: 6, everyMax: 12, durMin: 5.5, durMax: 8.5, lineSec: 1.9 },
-  // مشتری از کدام دروازه وارد/خارج شود
-  gate: { x: 16, z: 2.0 },
+  // مشتری از راه شمالی مزرعه (بین خانه‌ی مزرعه و زمین، کنار آغل) وارد/خارج می‌شود
+  gate: { x: 16.5, z: 67.8 },
+};
+
+// ---------- حیوانات مزرعه ----------
+// اگر فایل‌های cow.glb / sheep.glb / pig.glb / chicken.glb را در
+// public/models/animals بگذاری استفاده می‌شوند؛ وگرنه حیوان مکعبی با کد ساخته می‌شود.
+export const ANIMALS = {
+  basePath: 'models/animals/',
+  kinds: {
+    cow: { name: 'گاو', model: 'cow.glb', height: 0.78, count: 3, speed: 0.32 },
+    sheep: { name: 'گوسفند', model: 'sheep.glb', height: 0.55, count: 3, speed: 0.36 },
+    pig: { name: 'خوک', model: 'pig.glb', height: 0.5, count: 2, speed: 0.4 },
+    chicken: { name: 'مرغ', model: 'chicken.glb', height: 0.34, count: 4, speed: 0.55 },
+  },
 };
 
 // دیالوگ‌های گپ اهالی شهر (به نوبت بین دو نفر ردوبدل می‌شوند)
@@ -311,5 +401,6 @@ export const START = {
   inventory: {
     plot: 1, soil: 3, water: 4, fertilizer: 2, wateringCan: 1,
     wheatSeed: 2, carrotSeed: 2, cabbageSeed: 1, eggplantSeed: 1,
+    fence: 8, wall: 2, tent: 0, house: 0,
   },
 };

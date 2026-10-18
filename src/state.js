@@ -2,7 +2,7 @@
 import { START, LAYOUT, OBSTACLES, obstacleCost, xpForLevel, TIMING } from './config.js';
 
 const KEY = 'luko-city-save-v1';
-const SAVE_VERSION = 2;
+const SAVE_VERSION = 3;
 
 // مولد عدد تصادفی با بذر ثابت — تا چیدمان اولیه‌ی موانع برای همه یکسان و متعادل باشد
 function mulberry32(seed) {
@@ -41,48 +41,59 @@ function ringDist(cell, clearedSet) {
 }
 
 let obstacleSeq = 0;
-function makeObstacle(kind, x, z, cell, cost, rng) {
+function makeObstacle(kind, x, z, cell, cost, rng, area = 'farm') {
   return {
     id: 'ob_' + (obstacleSeq++) + '_' + Math.floor(rng() * 1e6).toString(36),
-    kind,                                    // 'tree' | 'rock'
-    type: Math.floor(rng() * 3),             // کدام مدل از پکیج
-    cell: cell == null ? null : cell,        // سلول زمین کشت (null = وحشی)
+    kind,                                                // 'tree' | 'rock'
+    type: Math.floor(rng() * (kind === 'tree' ? 4 : 3)), // کدام مدل از پکیج
+    cell: cell == null ? null : cell,                    // سلول زمین کشت (null = وحشی)
+    area,                                                // 'town' | 'farm'
     x, z,
     cost,
     rot: Math.floor(rng() * 4) * (Math.PI / 2) + rng() * 0.6,
-    scaleMul: 0.9 + rng() * 0.25,
+    scaleMul: 0.92 + rng() * 0.3,
   };
 }
 
-// ساخت موانع اولیه: همه‌ی سلول‌های بسته‌ی زمین + چندتایی دور شهر
-export function generateObstacles(clearedCells, plotCells = []) {
-  const rng = mulberry32(20241018);
+// موانع روی سلول‌های بسته‌ی زمین کشت — جنگل انبوه (بیشتر درخت، کمتر سنگ)
+export function generateFieldObstacles(clearedCells, plotCells = [], rng = mulberry32(20241018)) {
   const f = LAYOUT.field;
   const cleared = new Set([...clearedCells, ...plotCells]);
   const list = [];
-
   for (let cell = 0; cell < f.cols * f.rows; cell++) {
     if (cleared.has(cell)) continue;
     const { x, z } = cellPosition(cell);
-    const kind = rng() < 0.35 ? 'rock' : 'tree';
-    const ob = makeObstacle(kind, x, z, cell, 0, rng);
+    const kind = rng() < 0.24 ? 'rock' : 'tree';
+    const ob = makeObstacle(kind, x, z, cell, 0, rng, 'farm');
     ob.cost = obstacleCost(kind, ringDist(cell, cleared), ob.type);
     list.push(ob);
   }
+  return list;
+}
 
-  // موانع وحشی کناره‌های نقشه
-  const spots = [...LAYOUT.wildSpots];
+// موانع وحشی یک صحنه از روی نقطه‌های از پیش تعیین‌شده
+export function generateWildObstacles(area, count, rng = mulberry32(area === 'farm' ? 777 : 4242)) {
+  const spots = [...(area === 'farm' ? LAYOUT.wildSpotsFarm : LAYOUT.wildSpotsTown)];
   for (let i = spots.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1));
     [spots[i], spots[j]] = [spots[j], spots[i]];
   }
-  for (const s of spots.slice(0, OBSTACLES.initialWild)) {
-    const kind = rng() < 0.3 ? 'rock' : 'tree';
-    const ob = makeObstacle(kind, s.x, s.z, null, 0, rng);
+  return spots.slice(0, count).map((s) => {
+    const kind = rng() < 0.26 ? 'rock' : 'tree';
+    const ob = makeObstacle(kind, s.x, s.z, null, 0, rng, area);
     ob.cost = obstacleCost(kind, 2, ob.type);
-    list.push(ob);
-  }
-  return list;
+    return ob;
+  });
+}
+
+// همه‌ی موانع اولیه‌ی بازی تازه
+export function generateObstacles(clearedCells, plotCells = []) {
+  const rng = mulberry32(20241018);
+  return [
+    ...generateFieldObstacles(clearedCells, plotCells, rng),
+    ...generateWildObstacles('town', OBSTACLES.initialWildTown, rng),
+    ...generateWildObstacles('farm', OBSTACLES.initialWildFarm, rng),
+  ];
 }
 
 function starterPlots() {
@@ -108,6 +119,7 @@ export const state = {
   plots: starterPlots(),
   clearedCells: [...LAYOUT.starterClearedCells],
   obstacles: generateObstacles(LAYOUT.starterClearedCells, LAYOUT.starterPlotCells),
+  structures: [],         // سازه‌های ساخته‌ی بازیکن: حصار، دیوار، چادر، خانه
   buildingPos: {},        // id -> {x, z} موقعیت سفارشی ساختمان‌ها
   cooldowns: {},          // buildingId -> timestamp
   sound: true,
@@ -141,6 +153,7 @@ export function save() {
         plots: state.plots,
         clearedCells: state.clearedCells,
         obstacles: state.obstacles,
+        structures: state.structures,
         buildingPos: state.buildingPos,
         cooldowns: state.cooldowns,
         sound: state.sound,
@@ -181,21 +194,60 @@ export function load() {
       usedCells.add(p.cell);
     });
 
-    if (Array.isArray(data.obstacles)) {
+    if (Array.isArray(data.structures)) {
+      state.structures = data.structures.filter(s => s && s.kind && typeof s.gx === 'number');
+    }
+
+    const plotCells = state.plots.map(p => p.cell);
+    if (data.version >= 3 && Array.isArray(data.obstacles)) {
       state.obstacles = data.obstacles.filter(o => o && (o.kind === 'tree' || o.kind === 'rock'));
       state.clearedCells = Array.isArray(data.clearedCells)
         ? data.clearedCells
         : [...LAYOUT.starterClearedCells];
+      // موقعیت مانع سلولی همیشه از روی شماره‌ی سلول حساب شود
+      for (const o of state.obstacles) {
+        if (!o.area) o.area = o.cell !== null || o.z > 40 ? 'farm' : 'town';
+        if (o.cell !== null && o.cell !== undefined) {
+          if (o.cell < 0 || o.cell >= f.cols * f.rows) { o.cell = null; continue; }
+          const p = cellPosition(o.cell);
+          o.x = p.x; o.z = p.z; o.area = 'farm';
+        }
+      }
     } else {
-      // مهاجرت از ذخیره‌ی قدیمی (نسخه‌ی درخت‌های آزاد):
-      // زمین از اول پر از درخت و سنگ می‌شود، به‌جز سلول‌هایی که بازیکن رویشان جایگاه دارد.
-      const plotCells = state.plots.map(p => p.cell);
-      state.clearedCells = [...new Set([...LAYOUT.starterClearedCells, ...plotCells])];
-      state.obstacles = generateObstacles(state.clearedCells, plotCells);
+      // مهاجرت از نسخه‌های قبلی: زمین به صحنه‌ی جدا و بزرگ‌تر مزرعه منتقل شده.
+      // تعداد سلول‌هایی که بازیکن قبلاً باز کرده حفظ می‌شود (از وسط زمین به بیرون).
+      const prevCleared = Array.isArray(data.clearedCells) ? data.clearedCells.length : LAYOUT.starterClearedCells.length;
+      const cleared = new Set([...LAYOUT.starterClearedCells, ...plotCells]);
+      const others = [];
+      for (let cell = 0; cell < f.cols * f.rows; cell++) {
+        if (!cleared.has(cell)) others.push({ cell, d: ringDist(cell, cleared) });
+      }
+      others.sort((a, b) => a.d - b.d || a.cell - b.cell);
+      for (const o of others) {
+        if (cleared.size >= Math.max(cleared.size, Math.min(prevCleared, f.cols * f.rows - 8))) break;
+        cleared.add(o.cell);
+      }
+      state.clearedCells = [...cleared];
+
+      // موانع وحشی قدیمی دور شهر نگه داشته شوند (اگر بودند)
+      const rng = mulberry32(20241018);
+      const oldWild = Array.isArray(data.obstacles)
+        ? data.obstacles.filter(o => o && o.cell === null && (o.kind === 'tree' || o.kind === 'rock'))
+            .map(o => ({ ...o, area: 'town' }))
+        : [];
+      state.obstacles = [
+        ...generateFieldObstacles(state.clearedCells, plotCells, rng),
+        ...(oldWild.length ? oldWild : generateWildObstacles('town', OBSTACLES.initialWildTown, rng)),
+        ...generateWildObstacles('farm', OBSTACLES.initialWildFarm, rng),
+      ];
+    }
+    // اگر صحنه‌ی مزرعه هنوز مانع وحشی ندارد، برایش بساز
+    if (!state.obstacles.some(o => o.cell === null && o.area === 'farm')) {
+      state.obstacles.push(...generateWildObstacles('farm', OBSTACLES.initialWildFarm));
     }
     // هیچ مانعی نباید روی سلولِ دارای جایگاه بماند
     const plotCellSet = new Set(state.plots.map(p => p.cell));
-    state.obstacles = state.obstacles.filter(o => o.cell === null || !plotCellSet.has(o.cell));
+    state.obstacles = state.obstacles.filter(o => o.cell === null || o.cell === undefined || !plotCellSet.has(o.cell));
     return true;
   } catch (e) {
     return false;
@@ -317,11 +369,29 @@ export function removeObstacle(id) {
   return ob || null;
 }
 
-export function makeWildObstacle(x, z) {
-  const kind = Math.random() < 0.3 ? 'rock' : 'tree';
-  const ob = makeObstacle(kind, x, z, null, 0, Math.random);
+export function makeWildObstacle(x, z, area = 'town') {
+  const kind = Math.random() < 0.26 ? 'rock' : 'tree';
+  const ob = makeObstacle(kind, x, z, null, 0, Math.random, area);
   ob.cost = obstacleCost(kind, 2, ob.type);
   return ob;
+}
+
+// ---------- سازه‌های بازیکن (حصار/دیوار/چادر/خانه) ----------
+export function addStructure(structure) {
+  state.structures.push(structure);
+  save();
+  return structure;
+}
+
+export function removeStructure(id) {
+  const found = state.structures.find(s => s.id === id) || null;
+  state.structures = state.structures.filter(s => s.id !== id);
+  save();
+  return found;
+}
+
+export function getStructure(id) {
+  return state.structures.find(s => s.id === id) || null;
 }
 
 // ---------- جابجایی ساختمان‌ها (درگ‌اندراپ) ----------

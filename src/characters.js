@@ -71,13 +71,17 @@ export class Characters {
 
     this.ready = true;
     for (let i = 0; i < CHARACTERS.count; i++) {
-      const p = this._randomPoint();
-      this.createPerson('villager', p.x, p.z);
+      const p = this._randomPointIn(CHARACTERS.wander);
+      this.createPerson('villager', p.x, p.z, 'town');
+    }
+    for (let i = 0; i < (CHARACTERS.farmCount || 0); i++) {
+      const p = this._randomPointIn(CHARACTERS.wanderFarm);
+      this.createPerson('villager', p.x, p.z, 'farm');
     }
   }
 
   // ---------- ساخت یک آدمک ----------
-  createPerson(role, x, z) {
+  createPerson(role, x, z, area = 'town') {
     const heightMul = 0.92 + Math.random() * 0.14;
     let model, mixer = null, actions = null, limbs = null;
 
@@ -126,7 +130,7 @@ export class Characters {
 
     const person = {
       id: 'person_' + (this.seq++),
-      role, model, mixer, actions, limbs, shadow: sh,
+      role, area, model, mixer, actions, limbs, shadow: sh,
       state: S.IDLE,
       target: null,
       timer: 0.5 + Math.random() * 2.5,
@@ -229,12 +233,19 @@ export class Characters {
   }
 
   // ---------- حرکت ----------
-  _randomPoint() {
-    const w = CHARACTERS.wander;
+  _randomPointIn(w) {
     return {
       x: w.minX + Math.random() * (w.maxX - w.minX),
       z: w.minZ + Math.random() * (w.maxZ - w.minZ),
     };
+  }
+
+  _wanderOf(person) {
+    return person && person.area === 'farm' ? CHARACTERS.wanderFarm : CHARACTERS.wander;
+  }
+
+  _randomPoint(person) {
+    return this._randomPointIn(this._wanderOf(person));
   }
 
   _buildingDoor(b) {
@@ -281,14 +292,15 @@ export class Characters {
   }
 
   _pickTarget(person) {
-    if (Math.random() < CHARACTERS.enterChance) {
+    // فقط اهالی شهر داخل ساختمان‌ها می‌روند؛ اهالی مزرعه دور زمین می‌گردند
+    if (person.area === 'town' && Math.random() < CHARACTERS.enterChance) {
       const b = pick(LAYOUT.buildings);
       person.target = this._buildingDoor(b);
       person.enterBuilding = b;
       return;
     }
     person.enterBuilding = null;
-    person.target = this._randomPoint();
+    person.target = this._randomPoint(person);
   }
 
   // ---------- گپ دونفره ----------
@@ -299,14 +311,14 @@ export class Characters {
     const a = pick(free);
     let b = null, best = Infinity;
     for (const p of free) {
-      if (p === a) continue;
+      if (p === a || p.area !== a.area) continue; // گپ فقط داخل همان صحنه
       const d = (p.model.position.x - a.model.position.x) ** 2 +
                 (p.model.position.z - a.model.position.z) ** 2;
       if (d < best) { best = d; b = p; }
     }
     if (!b) return;
 
-    const w = CHARACTERS.wander;
+    const w = this._wanderOf(a);
     const mx = THREE.MathUtils.clamp((a.model.position.x + b.model.position.x) / 2, w.minX, w.maxX);
     const mz = THREE.MathUtils.clamp((a.model.position.z + b.model.position.z) / 2, w.minZ, w.maxZ);
     let dx = b.model.position.x - a.model.position.x;
@@ -383,7 +395,7 @@ export class Characters {
     if (!this.ready || this.customer || !stops || !stops.length) return false;
     const side = Math.random() < 0.5 ? -1 : 1;
     const gateX = CHARACTERS.gate.x * side;
-    const person = this.createPerson('customer', gateX, CHARACTERS.gate.z);
+    const person = this.createPerson('customer', gateX, CHARACTERS.gate.z, 'farm');
     person.speed = CHARACTERS.speed * 1.2;
     person.cust = {
       stops, idx: 0, isReady, onBuy, onDone, gateX,
@@ -559,7 +571,7 @@ export class Characters {
           if (p.insideTimer <= 0) {
             this._fade(p, true);
             p.enterBuilding = null;
-            p.target = this._randomPoint();
+            p.target = this._randomPoint(p);
             p.state = S.WALK;
             this._playAction(p, 'walk');
           }

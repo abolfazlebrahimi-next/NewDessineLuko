@@ -5,7 +5,10 @@ import { UI } from './ui.js';
 import { Farm } from './farm.js';
 import { Obstacles } from './obstacles.js';
 import { Characters } from './characters.js';
-import { LAYOUT, MAP, footprintOf } from './config.js';
+import { Decor } from './decor.js';
+import { Animals } from './animals.js';
+import { Constructions } from './constructions.js';
+import { LAYOUT, AREAS, footprintOf, isBuildItem } from './config.js';
 import { state, load, save, setBuildingPos, getBuildingPos, setPlotCell } from './state.js';
 import { sfx } from './audio.js';
 
@@ -16,13 +19,16 @@ function boot() {
   const farm = new Farm(world, ui);
   const obstacles = new Obstacles(world, ui);
   const characters = new Characters(world, ui);
+  const decor = new Decor(world);
+  const animals = new Animals(world);
+  const constructions = new Constructions(world, ui);
   farm.characters = characters; // مشتری‌ها از آدمک‌های شهر ساخته می‌شوند
 
   // بازیابی ذخیره
   load();
   ui.refreshAll();
 
-  // ---------- ساختمان‌ها (با موقعیت ذخیره‌شده) ----------
+  // ---------- ساختمان‌های شهر (با موقعیت ذخیره‌شده) ----------
   for (const b of LAYOUT.buildings) {
     const pos = getBuildingPos(b.id, b.x, b.z);
     world.addSprite({
@@ -40,24 +46,66 @@ function boot() {
     if (el) el.classList.add('building-label');
   }
 
-  // ---------- مزرعه و موانع (درخت/سنگ) ----------
+  // ---------- خانه‌ی مزرعه در صحنه‌ی مزرعه (دروازه‌ی برگشت به شهر) ----------
+  {
+    const fh = LAYOUT.farmhouse;
+    world.addSprite({ tag: 'portal:farmhouse', file: 'Farm.png', x: fh.x, z: fh.z, width: fh.w, y: 0.02 });
+    const sp = world.getSprite('portal:farmhouse');
+    const labelY = sp ? sp.scale.y + 0.35 : 3.5;
+    ui.showPlotLabel('farmhouse', fh.x, fh.z, 'خانه‌ی مزرعه — برگشت به شهر 🏘️', labelY);
+    const el = ui.plotLabels.get('farmhouse');
+    if (el) el.classList.add('building-label');
+  }
+
+  // ---------- مزرعه، موانع و سازه‌ها ----------
   farm.spawnAllPlots();
   obstacles.spawnAll();
+  constructions.spawnAll();
+
+  // ---------- رفت‌وبرگشت بین شهر و مزرعه با ابرها ----------
+  let currentArea = 'town';
+  function goToArea(areaKey) {
+    if (areaKey === currentArea || ui.cloudBusy) return;
+    sfx.whoosh();
+    ui.cloudTransition(() => {
+      currentArea = areaKey;
+      world.setArea(areaKey);
+      ui.setAreaButton(areaKey);
+      obstacles.deselect();
+      ui.closeModal();
+      ui.refreshLabels();
+      setTimeout(() => {
+        ui.toast(areaKey === 'farm'
+          ? 'به مزرعه رسیدی! 🌾 اینجا زمین زیر جنگله؛ درخت و سنگ‌ها رو با سکه پاک کن و کشت کن.'
+          : 'به شهر برگشتی! 🏘️');
+      }, 450);
+    });
+  }
+  ui.onAreaToggle = () => goToArea(currentArea === 'town' ? 'farm' : 'town');
+  ui.onFocusFarm = () => goToArea('farm');
 
   ui.onDropItem = (itemId, target) => {
-    farm.applyItem(itemId, target.plotId, target.point);
+    if (isBuildItem(itemId)) {
+      constructions.placeFromCard(itemId, target.point, currentArea);
+    } else {
+      farm.applyItem(itemId, target.plotId, target.point);
+    }
     ui.refreshTray();
     ui.bumpCurrencies();
     ui.refreshLabels();
   };
-  ui.canPlacePlotAt = (point) => farm.canPlacePlotAt(point);
-  ui.onFocusFarm = () => {
-    world.focusOn(LAYOUT.field.cx, LAYOUT.field.cz, 0.8);
+  ui.canPlaceAt = (itemId, point) => {
+    if (itemId === 'plot') return farm.canPlacePlotAt(point);
+    if (isBuildItem(itemId)) return constructions.canPlace(itemId, point, currentArea);
+    return true;
   };
 
-  // ---------- آدمک‌ها و مدل‌های طبیعت ----------
+  // ---------- مدل‌ها و موجودات ----------
   characters.init().catch((e) => console.warn('characters:', e));
   obstacles.init().catch((e) => console.warn('obstacles:', e));
+  decor.init().catch((e) => console.warn('decor:', e));
+  animals.init().catch((e) => console.warn('animals:', e));
+  constructions.init().catch((e) => console.warn('constructions:', e));
 
   // ---------- هندل امن حلقه‌ی بازی ----------
   let last = performance.now();
@@ -68,6 +116,7 @@ function boot() {
       obstacles.update(dt);
       farm.update(dt);
       characters.update(dt);
+      animals.update(dt);
       ui.updateFloats(dt);
       ui.refreshLabels();
       world.update(dt);
@@ -106,7 +155,6 @@ function boot() {
     let valid = true;
 
     if (dragging.kind === 'plot') {
-      // جایگاه فقط روی سلول‌های باز مزرعه
       const cell = farm.nearestFreeCell(x, z, dragging.id.slice(5));
       if (cell === null) {
         valid = false;
@@ -118,14 +166,15 @@ function boot() {
       }
     } else {
       dragging.targetCell = null;
-      x = THREE.MathUtils.clamp(x, MAP.minX, MAP.maxX);
-      z = THREE.MathUtils.clamp(z, MAP.minZ, MAP.maxZ);
+      const a = world.area;
+      x = THREE.MathUtils.clamp(x, a.minX, a.maxX);
+      z = THREE.MathUtils.clamp(z, a.minZ, a.maxZ);
       valid = !checkOverlap(dragging.kind, dragging.id, x, z);
     }
 
     dragging.target = { x, z };
     dragging.valid = valid;
-    const size = dragging.kind === 'plot' ? 2.5 : 4.4;
+    const size = dragging.kind === 'plot' ? 2.3 : 4.4;
     world.showPlacementGhost(x, z, size, valid);
 
     const sp = dragging.mesh;
@@ -140,7 +189,6 @@ function boot() {
       : 2.05;
     const fp = footprintOf(kind, w);
 
-    // ساختمان‌ها
     for (const b of LAYOUT.buildings) {
       const tag = 'building:' + b.id;
       if (tag === selfId) continue;
@@ -150,13 +198,15 @@ function boot() {
       if (Math.abs(sp.position.x - x) < fp.rx + bfp.rx - 0.4 &&
           Math.abs(sp.position.z - z) < fp.rz + bfp.rz - 0.3) return true;
     }
-    // موانع (درخت/سنگ) — روی آن‌ها نمی‌شود چیزی گذاشت؛ اول با سکه پاکشان کن
     for (const ob of state.obstacles) {
       const ofp = footprintOf(ob.kind, ob.kind === 'tree' ? 1.9 : 1.3);
       if (Math.abs(ob.x - x) < fp.rx + ofp.rx - 0.25 &&
           Math.abs(ob.z - z) < fp.rz + ofp.rz - 0.2) return true;
     }
-    // جایگاه‌ها
+    for (const r of constructions.occupiedRects()) {
+      if (Math.abs(r.x - x) < fp.rx + r.rx - 0.2 &&
+          Math.abs(r.z - z) < fp.rz + r.rz - 0.15) return true;
+    }
     for (const p of state.plots) {
       const tag = 'plot:' + p.id;
       if (tag === selfId) continue;
@@ -177,7 +227,6 @@ function boot() {
     canvas.classList.remove('grabbing');
 
     if (!d.valid || !d.target) {
-      // برگرداندن به جای قبلی
       d.mesh.position.x = d.from.x;
       d.mesh.position.z = d.from.z;
       if (d.mesh.userData.shadow) d.mesh.userData.shadow.position.set(d.from.x, 0.03, d.from.z + 0.25);
@@ -187,7 +236,6 @@ function boot() {
       return;
     }
 
-    // ثبت جابجایی
     if (d.kind === 'building') {
       const id = d.id.slice(9);
       setBuildingPos(id, d.target.x, d.target.z);
@@ -223,18 +271,19 @@ function boot() {
         mesh,
         moved: false,
       };
-      if (mesh && mesh.userData.type === 'obstacle') {
-        // مانع جابجا نمی‌شود؛ کلیک = دیدن هزینه/پاک‌کردن، درگ = حرکت دوربین
+      const type = mesh && mesh.userData.type;
+      if (type === 'obstacle') {
         const ob = obstacles.obstacleAt(mesh);
         if (ob) obstacles.setHover(ob);
         panning = true;
         canvas.setPointerCapture(e.pointerId);
-      } else if (mesh && (mesh.userData.type === 'building' || mesh.userData.type === 'plot')) {
+      } else if (type === 'building' || type === 'plot') {
         canvas.setPointerCapture(e.pointerId);
       } else {
+        // سازه، دروازه و زمین خالی: کلیک یا پن دوربین
         panning = true;
         canvas.setPointerCapture(e.pointerId);
-        canvas.classList.add('grabbing');
+        if (!mesh) canvas.classList.add('grabbing');
       }
     } catch (err) {
       console.error('[pointerdown]', err);
@@ -243,7 +292,6 @@ function boot() {
 
   canvas.addEventListener('pointermove', (e) => {
     try {
-      // هاور روی موانع (وقتی درگ نیست)
       if (!down && !dragging) {
         const mesh = world.pick(e.clientX, e.clientY);
         obstacles.setHover(mesh ? obstacles.obstacleAt(mesh) : null);
@@ -297,17 +345,25 @@ function boot() {
         if (type === 'building') {
           const id = down.mesh.userData.id.slice(9);
           const b = LAYOUT.buildings.find(x => x.id === id);
-          if (b) {
+          if (b && b.portal) {
+            // کلیک روی مزرعه = ابرها می‌آیند و می‌روی به صحنه‌ی مزرعه
+            goToArea(b.portal);
+          } else if (b) {
             sfx.click();
             world.focusOn(down.mesh.position.x, down.mesh.position.z + 1.5, 1.12);
             ui.openBuilding(b);
           }
+        } else if (type === 'portal') {
+          goToArea('town');
         } else if (type === 'plot') {
           farm.interactPlot(down.mesh.userData.id.slice(5));
         } else if (type === 'obstacle') {
-          // کلیک اول: نمایش هزینه — کلیک دوم: پرداخت سکه و پاک‌شدن
           const ob = obstacles.obstacleAt(down.mesh);
           if (ob) obstacles.interact(ob);
+        } else if (type === 'structure') {
+          const st = constructions.structureAt(down.mesh);
+          if (st) constructions.interact(st);
+          ui.refreshTray();
         }
       } else if (isClick && !down.mesh) {
         obstacles.deselect();
@@ -347,17 +403,14 @@ function boot() {
 
   // خوش‌آمد
   setTimeout(() => {
-    ui.toast('به شهر لوکو خوش آمدی! 🌳 روی ساختمان‌ها کلیک کن و مزرعه‌ات را بساز.');
+    ui.toast('به شهر لوکو خوش آمدی! 🌳 برای کشاورزی روی ساختمان «مزرعه» کلیک کن تا با ابرها بری به فضای مزرعه ☁️');
   }, 600);
   setTimeout(() => {
-    ui.toast('زمین جنوب شهر پر از درخت و سنگه! 🌳 روی هرکدوم کلیک کن، هزینه‌ش رو ببین و با کلیک دوم با سکه پاکش کن تا زمین کشت باز بشه.');
-  }, 4500);
+    ui.toast('دور شهر و مزرعه جنگل انبوهه! 🌲 درخت/سنگ‌ها رو با کلیک و سکه پاک کن تا جا باز بشه. از فروشگاه هم می‌تونی حصار و دیوار بخری و دیوارکشی کنی 🧱');
+  }, 5200);
   setTimeout(() => {
-    ui.toast('با درگ روی زمین دوربین رو ببر، با غلتک موس زوم کن تا کل نقشه‌ی بزرگ را ببینی 🔍 ساختمان‌ها و جایگاه‌ها هم قابل جابجایی‌ان ✋');
-  }, 11000);
-  setTimeout(() => {
-    ui.toast('اهالی شهر گاهی کنار هم گپ می‌زنن 💬 و وقتی محصولت برسه، مشتری میاد وارسیش می‌کنه… شاید اولی رو نخواد و دومی رو بخره! 🛒');
-  }, 18000);
+    ui.toast('توی مزرعه حیوانات هم هستن 🐄 و جایگاه‌ها کامل به هم می‌چسبن. با دکمه‌ی سبز کنار صفحه بین شهر و مزرعه جابجا شو.');
+  }, 11500);
 }
 
 if (document.readyState === 'loading') {

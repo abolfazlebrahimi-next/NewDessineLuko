@@ -190,6 +190,13 @@ html, body {
   background: linear-gradient(#ffe08a, #f0b84e);
   border-color: var(--gold-dark);
 }
+.side-btn.area-btn {
+  background: linear-gradient(#8fe07a, #4fae5c);
+  border-color: #2c7c3a;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,.3);
+}
+.side-btn.area-btn .side-ico { font-size: 24px; line-height: 1; width: auto; height: auto; }
 .side-btn:active { transform: translateY(2px); }
 .side-ico { width: 28px; height: 28px; color: var(--brown-txt); display: block; }
 .side-ico .ico { width: 28px; height: 28px; }
@@ -275,6 +282,63 @@ html, body {
   max-width: 66px; max-height: 52px; object-fit: contain;
   filter: drop-shadow(0 3px 5px rgba(0,0,0,.28));
 }
+.emoji-icon {
+  font-size: 34px; line-height: 1;
+  filter: drop-shadow(0 3px 5px rgba(0,0,0,.28));
+}
+.shop-item-img .emoji-icon { font-size: 52px; }
+#drag-ghost .emoji-icon { font-size: 40px; }
+
+/* ================= انتقال ابری بین شهر و مزرعه ================= */
+#clouds {
+  position: absolute; inset: 0;
+  z-index: 500;
+  pointer-events: none;
+  overflow: hidden;
+  visibility: hidden;
+}
+#clouds.show, #clouds.leave { visibility: visible; pointer-events: auto; }
+.cloud-sheet {
+  position: absolute; inset: -6%;
+  background: linear-gradient(180deg, #fdfefe, #eef6fb);
+  opacity: 0;
+  transition: opacity .72s ease;
+}
+#clouds.show .cloud-sheet { opacity: 1; }
+#clouds.leave .cloud-sheet { opacity: 0; transition-duration: .78s; }
+.cloud-puff {
+  position: absolute;
+  right: -320px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(255,255,255,.98) 52%, rgba(255,255,255,0) 72%);
+  transform: translateX(0);
+  opacity: 0;
+}
+#clouds.show .cloud-puff {
+  animation: cloudIn .95s cubic-bezier(.3,.7,.4,1) forwards;
+}
+#clouds.leave .cloud-puff {
+  animation: cloudOut .9s cubic-bezier(.5,.2,.7,1) forwards;
+}
+@keyframes cloudIn {
+  0% { transform: translateX(0) scale(.92); opacity: 0; }
+  25% { opacity: 1; }
+  100% { transform: translateX(calc(-100vw - 340px)) scale(1.06); opacity: 1; }
+}
+@keyframes cloudOut {
+  0% { transform: translateX(calc(-100vw - 340px)) scale(1.06); opacity: 1; }
+  100% { transform: translateX(calc(-200vw - 680px)) scale(1.12); opacity: .0; }
+}
+.cloud-text {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px; font-weight: 900; color: #5b7a8c;
+  text-shadow: 0 2px 0 #fff;
+  opacity: 0;
+  transition: opacity .4s ease .25s;
+}
+#clouds.show .cloud-text { opacity: 1; }
+#clouds.leave .cloud-text { opacity: 0; transition-duration: .2s; }
 .card-buy {
   width: 100%; display: flex; align-items: center; justify-content: space-between;
   gap: 4px;

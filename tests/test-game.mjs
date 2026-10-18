@@ -1,6 +1,7 @@
 // تست منطق بازی: موانع زمین، هزینه‌ها، اندازه‌ی آدمک‌ها و دیالوگ‌ها
 import {
   LAYOUT, CHARACTERS, CHAT_DIALOGUES, CUSTOMER_LINES, obstacleCost, OBSTACLES,
+  AREAS, STRUCTURES, ANIMALS, ITEMS, isBuildItem, isGroundItem,
 } from '../src/config.js';
 import {
   state, cellPosition, generateObstacles, obstacleAtCell, isCellBlocked, removeObstacle,
@@ -14,12 +15,20 @@ const check = (name, cond) => {
 
 const f = LAYOUT.field;
 const totalCells = f.cols * f.rows;
-check('زمین کشت بزرگ است (۴۰ سلول)', totalCells === 40);
+check('زمین کشت بزرگ است (۷۰ سلول)', totalCells === 70);
+check('جایگاه‌ها کامل به هم می‌چسبند (فاصله‌ی شبکه ≈ پهنای جایگاه)', f.spacing - 2.05 < 0.1);
+check('مزرعه صحنه‌ی جدا دارد (دور از شهر)', AREAS.farm.minZ > AREAS.town.maxZ + 30 && f.cz > AREAS.farm.minZ);
+check('ساختمان مزرعه دروازه‌ی رفتن به مزرعه است',
+  LAYOUT.buildings.find(b => b.id === 'farm').portal === 'farm');
 
 const cellObstacles = state.obstacles.filter(o => o.cell !== null);
 const wildObstacles = state.obstacles.filter(o => o.cell === null);
 check('همه‌ی سلول‌های بسته مانع دارند', cellObstacles.length === totalCells - LAYOUT.starterClearedCells.length);
-check('موانع وحشی دور شهر هست', wildObstacles.length === OBSTACLES.initialWild);
+check('موانع وحشی در هر دو صحنه هست',
+  wildObstacles.length === OBSTACLES.initialWildTown + OBSTACLES.initialWildFarm &&
+  wildObstacles.some(o => o.area === 'town') && wildObstacles.some(o => o.area === 'farm'));
+check('جنگل انبوه: بیشتر موانع زمین درخت‌اند',
+  cellObstacles.filter(o => o.kind === 'tree').length > cellObstacles.length * 0.6);
 check('روی سلول باز مانع نیست', LAYOUT.starterClearedCells.every(c => !isCellBlocked(c)));
 check('روی جایگاه اولیه مانع نیست', LAYOUT.starterPlotCells.every(c => !obstacleAtCell(c)));
 check('همه‌ی موانع هزینه‌ی سکه دارند', state.obstacles.every(o => o.cost > 0));
@@ -56,6 +65,20 @@ check('جمله‌های مشتری کامل‌اند',
   ['arrive', 'inspect', 'reject', 'buy', 'thanks', 'gone'].every(k => CUSTOMER_LINES[k].length >= 2));
 check('جمله‌ی وارسی مشتری جای اسم محصول دارد', CUSTOMER_LINES.inspect.some(s => s.includes('{crop}')));
 check('گپ دونفره زمان‌بندی دارد', CHARACTERS.chat.everyMax > CHARACTERS.chat.everyMin);
+check('مشتری از دروازه‌ی مزرعه می‌آید', CHARACTERS.gate.z > AREAS.farm.minZ);
+check('در مزرعه هم آدمک هست', CHARACTERS.farmCount >= 2 && CHARACTERS.wanderFarm.minZ > AREAS.farm.minZ);
+
+// ساخت‌وساز و حیوانات
+check('آیتم‌های ساخت‌وساز در فروشگاه هستن',
+  ['fence', 'wall', 'tent', 'house'].every(id => ITEMS[id] && isBuildItem(id) && isGroundItem(id)));
+check('مدل هر سازه تعریف شده',
+  Object.keys(STRUCTURES.kinds).length === 4 && Object.values(STRUCTURES.kinds).every(k => k.model.endsWith('.glb')));
+check('حصار و دیوار قابل چرخش‌اند',
+  STRUCTURES.kinds.fence.rotatable && STRUCTURES.kinds.wall.rotatable);
+check('چهار حیوان مزرعه تعریف شدن',
+  ['cow', 'sheep', 'pig', 'chicken'].every(k => ANIMALS.kinds[k] && ANIMALS.kinds[k].count > 0));
+check('حیوان‌ها از آدمک کوتاه‌ترند', Object.values(ANIMALS.kinds).every(k => k.height < CHARACTERS.height));
+check('جای شروع سازه‌ای ساخته نشده', Array.isArray(state.structures) && state.structures.length === 0);
 
 console.log(failed ? `\n${failed} تست رد شد!` : '\nهمه‌ی تست‌های منطق بازی پاس شدند ✓');
 process.exit(failed ? 1 : 0);

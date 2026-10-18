@@ -5,9 +5,9 @@
 // اگر بارگذاری نشدند، خودکار از تصاویر دوبعدی استفاده می‌شود.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { OBSTACLES, TIMING, REWARDS } from './config.js';
+import { OBSTACLES, TIMING, REWARDS, LAYOUT } from './config.js';
 import {
-  state, addObstacle, removeObstacle, makeWildObstacle,
+  state, addObstacle, removeObstacle, makeWildObstacle, cellPosition,
   addDew, addXp, spend, canAfford, save,
 } from './state.js';
 import { sfx } from './audio.js';
@@ -40,12 +40,17 @@ export class Obstacles {
   syncObstacle(ob) {
     const tag = 'obstacle:' + ob.id;
     if (this.world.getSprite(tag)) return;
+    // مانع روی سلول زمین همیشه دقیق وسط سلول خودش است
+    if (ob.cell !== null && ob.cell !== undefined) {
+      const p = cellPosition(ob.cell);
+      ob.x = p.x; ob.z = p.z;
+    }
     // پروکسی نامرئی برای کلیک (مدل سه‌بعدی جدا روی آن سوار می‌شود)
     const sp = this.world.addSprite({
       tag,
       texture: this.transparentTexture(),
       x: ob.x, z: ob.z,
-      width: ob.kind === 'tree' ? 1.55 : 1.35,
+      width: ob.kind === 'tree' ? 1.8 : 1.5,
       y: 0.02,
     });
     sp.material.opacity = 0;
@@ -83,7 +88,7 @@ export class Obstacles {
     });
 
     try {
-      for (const kind of ['tree', 'rock', 'grass']) {
+      for (const kind of ['tree', 'rock']) {
         const scenes = await Promise.all(OBSTACLES.models[kind].map(loadOne));
         this.templates[kind] = scenes.filter(Boolean);
       }
@@ -92,11 +97,33 @@ export class Obstacles {
     if (this.templates.tree.length || this.templates.rock.length) {
       this.modelsReady = true;
       for (const ob of state.obstacles) this.attachModel(ob);
-      this.spawnDecor();
     } else {
       this.modelsFailed = true;
       for (const ob of state.obstacles) this.attachFallback(ob);
     }
+  }
+
+  // کلون یک مدل با اندازه‌ی نرمال‌شده (ارتفاع یا پهنا) و کف روی زمین
+  _cloneNormalized(tplScene, target, byHeight, renderZ) {
+    const inner = tplScene.clone(true);
+    const box = new THREE.Box3().setFromObject(inner);
+    const size = new THREE.Vector3();
+    const center = new THREE.Vector3();
+    box.getSize(size);
+    box.getCenter(center);
+    if (size.y <= 0.01) return null;
+    const s = byHeight ? target / size.y : target / Math.max(size.x, size.z);
+    inner.scale.setScalar(s);
+    inner.position.set(-center.x * s, -box.min.y * s, -center.z * s);
+    inner.traverse((o) => {
+      if (o.isMesh) {
+        o.castShadow = false;
+        o.renderOrder = 1000 + renderZ * 10 + 1;
+      }
+    });
+    const holder = new THREE.Group();
+    holder.add(inner);
+    return holder;
   }
 
   attachModel(ob) {
@@ -105,30 +132,59 @@ export class Obstacles {
     const pool = this.templates[ob.kind];
     if (!pool || !pool.length) { this.attachFallback(ob); return; }
     const tpl = pool[ob.type % pool.length];
-    const inner = tpl.clone(true);
 
-    // نرمال‌سازی اندازه: درخت به ارتفاع هدف، سنگ به پهنای هدف
-    const box = new THREE.Box3().setFromObject(inner);
-    const size = new THREE.Vector3();
-    const center = new THREE.Vector3();
-    box.getSize(size);
-    box.getCenter(center);
-    if (size.y <= 0.01) { this.attachFallback(ob); return; }
     const target = ob.kind === 'tree'
       ? OBSTACLES.treeHeight * (ob.scaleMul || 1)
       : OBSTACLES.rockWidth * (ob.scaleMul || 1);
-    const s = ob.kind === 'tree' ? target / size.y : target / Math.max(size.x, size.z);
-    inner.scale.setScalar(s);
-    inner.position.set(-center.x * s, -box.min.y * s, -center.z * s);
-    inner.traverse((o) => {
-      if (o.isMesh) {
-        o.castShadow = false;
-        o.renderOrder = 1000 + ob.z * 10 + 1;
-      }
-    });
+    const main = this._cloneNormalized(tpl, target, ob.kind === 'tree', ob.z);
+    if (!main) { this.attachFallback(ob); return; }
 
     const group = new THREE.Group();
-    group.add(inner);
+    group.add(main);
+
+    // 🌲 خوشه‌ی جنگلی: کنار هر مانع چند درخت/سنگ کوچک‌ترِ چسبیده به هم
+    // تا زمین واقعاً شبیه جنگلِ پشت‌به‌پشت دیده شود (فقط ظاهر؛ همان یک مانع حساب می‌شود)
+    let seed = 0;
+    for (const ch of String(ob.id)) seed = (seed * 31 + ch.charCodeAt(0)) % 9973;
+    const rnd = () => { seed = (seed * 48271) % 2147483647; return seed / 2147483647; };
+    const treePool = this.templates.tree;
+    const rockPool = this.templates.rock;
+    if (ob.kind === 'tree' && treePool.length) {
+      const extras = 2 + Math.floor(rnd() * 2); // ۲ یا ۳ درخت اضافه
+      for (let i = 0; i < extras; i++) {
+        const h = OBSTACLES.treeHeight * (0.55 + rnd() * 0.3);
+        const ex = this._cloneNormalized(treePool[Math.floor(rnd() * treePool.length)], h, true, ob.z);
+        if (!ex) continue;
+        const ang = (i / extras) * Math.PI * 2 + rnd() * 0.9;
+        const r = 0.52 + rnd() * 0.3;
+        ex.position.set(Math.cos(ang) * r, 0, Math.sin(ang) * r * 0.8);
+        ex.rotation.y = rnd() * Math.PI * 2;
+        group.add(ex);
+      }
+      if (rockPool.length && rnd() < 0.55) {
+        const ex = this._cloneNormalized(rockPool[Math.floor(rnd() * rockPool.length)], 0.55 + rnd() * 0.3, false, ob.z);
+        if (ex) {
+          ex.position.set(0.55 - rnd(), 0, 0.45 - rnd() * 0.5);
+          group.add(ex);
+        }
+      }
+    } else if (ob.kind === 'rock') {
+      const extras = 1 + Math.floor(rnd() * 2);
+      for (let i = 0; i < extras; i++) {
+        const src = rnd() < 0.45 && treePool.length ? treePool : rockPool;
+        if (!src.length) continue;
+        const isTree = src === treePool;
+        const ex = this._cloneNormalized(
+          src[Math.floor(rnd() * src.length)],
+          isTree ? OBSTACLES.treeHeight * 0.5 : 0.6,
+          isTree, ob.z);
+        if (!ex) continue;
+        ex.position.set(0.5 - rnd(), 0, 0.4 - rnd() * 0.6);
+        ex.rotation.y = rnd() * Math.PI * 2;
+        group.add(ex);
+      }
+    }
+
     group.position.set(ob.x, 0, ob.z);
     group.rotation.y = ob.rot || 0;
     this.world.scene.add(group);
@@ -154,37 +210,6 @@ export class Obstacles {
       sp.scale.set(1.45 * (ob.scaleMul || 1), 1.15 * (ob.scaleMul || 1), 1);
     }
     sp.userData.baseScale.copy(sp.scale);
-  }
-
-  // بوته‌های چمن تزیینی دور نقشه (غیرتعاملی)
-  spawnDecor() {
-    const pool = this.templates.grass;
-    if (!pool.length) return;
-    const spots = [];
-    for (let i = 0; i < 26; i++) {
-      const side = Math.random() < 0.5 ? -1 : 1;
-      const inStrip = Math.random() < 0.6;
-      spots.push(inStrip
-        ? { x: side * (11.5 + Math.random() * 4.5), z: -6 + Math.random() * 21 }
-        : { x: -13 + Math.random() * 26, z: Math.random() < 0.5 ? -7 + Math.random() * 1.6 : 15.2 + Math.random() * 1.2 });
-    }
-    for (const s of spots) {
-      const inner = pool[Math.floor(Math.random() * pool.length)].clone(true);
-      const box = new THREE.Box3().setFromObject(inner);
-      const size = new THREE.Vector3();
-      const center = new THREE.Vector3();
-      box.getSize(size);
-      box.getCenter(center);
-      const sc = OBSTACLES.grassHeight * (0.8 + Math.random() * 0.7) / Math.max(0.05, size.y);
-      inner.scale.setScalar(sc);
-      inner.position.set(-center.x * sc, -box.min.y * sc, -center.z * sc);
-      inner.traverse((o) => { if (o.isMesh) o.renderOrder = 1000 + s.z * 10; });
-      const g = new THREE.Group();
-      g.add(inner);
-      g.position.set(s.x, 0, s.z);
-      g.rotation.y = Math.random() * Math.PI * 2;
-      this.world.scene.add(g);
-    }
   }
 
   // ---------- هاور ----------
@@ -305,25 +330,20 @@ export class Obstacles {
   }
 
   spawnWild() {
-    const free = [];
-    // جای آزاد: نقطه‌های وحشی‌ای که مانعی نزدیکی‌شان نیست
-    const spots = [
-      { x: -15.6, z: -5.4 }, { x: 15.6, z: -5.4 }, { x: -14.4, z: 6.2 }, { x: 14.4, z: 6.4 },
-      { x: -2.2, z: -7.0 }, { x: 2.4, z: -6.8 }, { x: -7.5, z: 15.9 }, { x: 7.4, z: 16.0 },
-      { x: -15.8, z: 2.4 }, { x: 15.8, z: 2.6 }, { x: -6.4, z: -6.6 }, { x: 6.6, z: -6.6 },
-    ];
-    for (const s of spots) {
-      const busy = state.obstacles.some(o => Math.hypot(o.x - s.x, o.z - s.z) < 1.6);
-      if (!busy) free.push(s);
-    }
+    // یک صحنه‌ی تصادفی (شهر یا مزرعه) و یک جای آزاد از نقطه‌های وحشی همان صحنه
+    const area = Math.random() < 0.5 ? 'town' : 'farm';
+    const spots = area === 'farm' ? LAYOUT.wildSpotsFarm : LAYOUT.wildSpotsTown;
+    const free = spots.filter(s => !state.obstacles.some(o => Math.hypot(o.x - s.x, o.z - s.z) < 1.6));
     if (!free.length) return;
     const s = free[Math.floor(Math.random() * free.length)];
-    const ob = makeWildObstacle(s.x, s.z);
+    const ob = makeWildObstacle(s.x, s.z, area);
     addObstacle(ob);
     this.syncObstacle(ob);
     if (this.modelsReady) this.attachModel(ob);
     else if (this.modelsFailed) this.attachFallback(ob);
-    if (ob.kind === 'tree') this.ui.toast('یک درخت تازه کناره‌های شهر رویید! 🌳');
+    if (ob.kind === 'tree') {
+      this.ui.toast(area === 'farm' ? 'یک درخت تازه دور مزرعه رویید! 🌳' : 'یک درخت تازه کناره‌های شهر رویید! 🌳');
+    }
   }
 
   // ---------- بافت‌های کمکی ----------

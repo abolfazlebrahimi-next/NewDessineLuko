@@ -265,7 +265,9 @@ export class Farm {
       if (d < bestD) { bestD = d; best = cell; }
     }
     if (nearest === null || nearestD > 36) {
-      this.ui.toast('کارت را داخل مزرعه و نزدیک‌تر جای خالی بینداز.');
+      this.ui.toast(worldPoint.z < 40
+        ? 'جایگاه فقط در صفحه‌ی مزرعه ساخته می‌شود! اول روی ساختمان مزرعه کلیک کن تا با ابرها بری اونجا 🌾'
+        : 'کارت را داخل مزرعه و نزدیک‌تر جای خالی بینداز.');
       sfx.error();
       return false;
     }
@@ -358,7 +360,7 @@ export class Farm {
       const crop = CROPS[plot.crop];
       return {
         plotId: plot.id,
-        x: at.x, z: at.z + 1.55,   // جلوی جایگاه می‌ایستد
+        x: at.x, z: at.z + 1.3,   // جلوی جایگاه می‌ایستد (جایگاه‌ها به هم چسبیده‌اند)
         faceX: at.x, faceZ: at.z,   // رو به محصول
         cropName: crop ? crop.name : 'محصول',
         decision,

@@ -1,10 +1,13 @@
 // ================= جهان بازی با Three.js =================
 import * as THREE from 'three';
-import { ASSET, MAP } from './config.js';
+import { ASSET, AREAS } from './config.js';
 
-const VIEW_HEIGHT = 15.2;      // ارتفاع دید ارتوگرافیک (نقشه بزرگ‌تر شده)
+const VIEW_HEIGHT = 15.2;      // ارتفاع دید ارتوگرافیک
 const CAM_POS = new THREE.Vector3(0, 13.5, 11.8);
 const CAM_TARGET = new THREE.Vector3(0, 0, 2.2);
+// زوم متعادل: نه خیلی نزدیک، نه خیلی دور — همیشه بشود مدیریت کرد
+const ZOOM_MIN = 0.62;
+const ZOOM_MAX = 1.45;
 
 export class World {
   constructor(canvas) {
@@ -31,6 +34,7 @@ export class World {
     this.effects = [];           // انیمیشن‌های فعال
     this.panTarget = new THREE.Vector3().copy(CAM_TARGET);
     this.zoom = 1;
+    this.area = AREAS.town;      // صحنه‌ی فعلی: شهر یا مزرعه
 
     this._makeGround();
     this._makeShadowTexture();
@@ -58,12 +62,13 @@ export class World {
   _makeGround() {
     const grass = this.loader.load(ASSET('grass_tile.png'));
     grass.wrapS = grass.wrapT = THREE.RepeatWrapping;
-    grass.repeat.set(9, 6);
+    grass.repeat.set(13, 24);
     grass.colorSpace = THREE.SRGBColorSpace;
     const mat = new THREE.MeshBasicMaterial({ map: grass });
-    this.ground = new THREE.Mesh(new THREE.PlaneGeometry(72, 46), mat);
+    // یک زمین بزرگ که هر دو صحنه (شهر در شمال، مزرعه در جنوب دوردست) رویش هستند
+    this.ground = new THREE.Mesh(new THREE.PlaneGeometry(105, 190), mat);
     this.ground.rotation.x = -Math.PI / 2;
-    this.ground.position.set(0, 0, 1);
+    this.ground.position.set(0, 0, 42);
     this.ground.renderOrder = -1000;
     this.scene.add(this.ground);
 
@@ -81,9 +86,13 @@ export class World {
       map: patchTex, transparent: true, depthWrite: false,
     });
     for (const [x, z, s] of [
+      // صحنه‌ی شهر
       [0, -3.0, 11], [-10.5, -3.4, 7], [10.5, -3.4, 7], [-10.8, 1.4, 6.5], [10.8, 1.4, 6.5],
-      [0, 1.4, 15],   // میدان وسط شهر
-      [0, 9.2, 21],   // زمین کشت بزرگ جنوب شهر
+      [0, 1.4, 16],   // میدان وسط شهر
+      // صحنه‌ی مزرعه
+      [0, 76, 24],    // زمین کشت
+      [-8.6, 66.4, 8], // خانه‌ی مزرعه
+      [13.9, 75.5, 10], // آغل حیوانات
     ]) {
       const patch = new THREE.Mesh(new THREE.PlaneGeometry(s, s), this.patchMat);
       patch.rotation.x = -Math.PI / 2;
@@ -362,22 +371,33 @@ export class World {
     right.crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize().negate();
     this.panTarget.addScaledVector(right, dx * worldPerPixel);
     this.panTarget.addScaledVector(fwd, -dy * worldPerPixel * 1.35);
-    this.panTarget.x = THREE.MathUtils.clamp(this.panTarget.x, MAP.panMinX, MAP.panMaxX);
-    this.panTarget.z = THREE.MathUtils.clamp(this.panTarget.z, MAP.panMinZ, MAP.panMaxZ);
+    const a = this.area;
+    this.panTarget.x = THREE.MathUtils.clamp(this.panTarget.x, a.panMinX, a.panMaxX);
+    this.panTarget.z = THREE.MathUtils.clamp(this.panTarget.z, a.panMinZ, a.panMaxZ);
   }
 
   zoomBy(delta) {
-    // زوم‌اوت بیشتر برای دیدن کل نقشه‌ی بزرگ
-    this.zoom = THREE.MathUtils.clamp(this.zoom * (delta > 0 ? 0.92 : 1.08), 0.5, 1.7);
+    // زوم متعادل و قابل مدیریت
+    this.zoom = THREE.MathUtils.clamp(this.zoom * (delta > 0 ? 0.93 : 1.07), ZOOM_MIN, ZOOM_MAX);
   }
 
-  focusOn(x, z, zoom = 1.18) {
+  focusOn(x, z, zoom = 1.15) {
+    const a = this.area;
     this.panTarget.set(
-      THREE.MathUtils.clamp(x, MAP.panMinX, MAP.panMaxX),
+      THREE.MathUtils.clamp(x, a.panMinX, a.panMaxX),
       0,
-      THREE.MathUtils.clamp(z - 1.2, MAP.panMinZ, MAP.panMaxZ)
+      THREE.MathUtils.clamp(z - 1.2, a.panMinZ, a.panMaxZ)
     );
-    this.zoom = zoom;
+    this.zoom = THREE.MathUtils.clamp(zoom, ZOOM_MIN, ZOOM_MAX);
+  }
+
+  // تعویض صحنه (زیر ابرها صدا زده می‌شود): دوربین یک‌جا به صحنه‌ی جدید می‌پرد
+  setArea(areaKey) {
+    this.area = AREAS[areaKey] || AREAS.town;
+    const f = this.area.focus;
+    this.panTarget.set(f.x, 0, f.z);
+    this.zoom = THREE.MathUtils.clamp(f.zoom, ZOOM_MIN, ZOOM_MAX);
+    this._updateCamera();
   }
 
   // ---------- حلقه‌ی رندر ----------
