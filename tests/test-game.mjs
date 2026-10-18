@@ -2,9 +2,11 @@
 import {
   LAYOUT, CHARACTERS, CHAT_DIALOGUES, CUSTOMER_LINES, obstacleCost, OBSTACLES,
   AREAS, STRUCTURES, ANIMALS, ITEMS, isBuildItem, isGroundItem,
+  TEST_MODE, ITEM_SELL_RATIO, MAP_BOUNDS,
 } from '../src/config.js';
 import {
   state, cellPosition, generateObstacles, obstacleAtCell, isCellBlocked, removeObstacle,
+  canAfford, spend, markDecorRemoved,
 } from '../src/state.js';
 
 let failed = 0;
@@ -79,6 +81,27 @@ check('چهار حیوان مزرعه تعریف شدن',
   ['cow', 'sheep', 'pig', 'chicken'].every(k => ANIMALS.kinds[k] && ANIMALS.kinds[k].count > 0));
 check('حیوان‌ها از آدمک کوتاه‌ترند', Object.values(ANIMALS.kinds).every(k => k.height < CHARACTERS.height));
 check('جای شروع سازه‌ای ساخته نشده', Array.isArray(state.structures) && state.structures.length === 0);
+
+// حالت تست: سکه بی‌نهایت
+check('حالت تست فعال است (پول بی‌نهایت)', TEST_MODE.infiniteMoney === true);
+check('با پول بی‌نهایت هر خریدی ممکن است', canAfford('coins', 10 ** 12) && canAfford('dew', 10 ** 12));
+{
+  const before = state.coins;
+  check('خرج‌کردن از سکه‌ی بی‌نهایت کم نمی‌کند', spend('coins', 5000) === true && state.coins === before);
+}
+
+// نقشه‌ی یکپارچه: دوربین می‌تواند از شهر تا مزرعه کشیده شود
+check('محدوده‌ی حرکت دوربین هر دو صحنه و بینشان را پوشش می‌دهد',
+  MAP_BOUNDS.panMinZ <= AREAS.town.focus.z && MAP_BOUNDS.panMaxZ >= AREAS.farm.focus.z);
+
+// فروش آیتم‌ها و آیکون بدون استیکر
+check('نسبت فروش آیتم‌ها تعریف شده', ITEM_SELL_RATIO > 0 && ITEM_SELL_RATIO < 1);
+check('آیتم‌های ساخت آیکون برداری دارند، نه ایموجی',
+  ['fence', 'wall', 'tent', 'house'].every(id => ITEMS[id].svg && !ITEMS[id].emoji));
+
+// پاک‌کردن جنگل ذخیره می‌شود
+markDecorRemoved(424242);
+check('درخت پاک‌شده‌ی جنگل در وضعیت ذخیره شد', state.removedDecor.includes(424242));
 
 console.log(failed ? `\n${failed} تست رد شد!` : '\nهمه‌ی تست‌های منطق بازی پاس شدند ✓');
 process.exit(failed ? 1 : 0);

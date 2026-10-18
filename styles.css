@@ -71,8 +71,8 @@ html, body {
   touch-action: none;
 }
 
-#game { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
-#scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; }
+#game { position: relative; width: 100vw; height: 100vh; height: 100dvh; overflow: hidden; }
+#scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
 #scene.grabbing { cursor: grabbing; }
 #overlay { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
 #overlay > * { pointer-events: auto; }
@@ -230,7 +230,14 @@ html, body {
   overflow-x: auto; overflow-y: hidden;
   scroll-behavior: smooth;
   padding: 2px;
+  touch-action: pan-x; /* سوایپ افقی = اسکرول کارت‌ها؛ درگ عمودی کارت سر جایش */
+  -webkit-overflow-scrolling: touch;
 }
+.shop-grid, .mail-list, .settings-list {
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+.shop-cats { touch-action: pan-x; -webkit-overflow-scrolling: touch; }
 .tray-scroll::-webkit-scrollbar { height: 0; }
 
 .card {
@@ -282,12 +289,25 @@ html, body {
   max-width: 66px; max-height: 52px; object-fit: contain;
   filter: drop-shadow(0 3px 5px rgba(0,0,0,.28));
 }
-.emoji-icon {
-  font-size: 34px; line-height: 1;
+.item-svg {
+  width: 42px; height: 42px;
   filter: drop-shadow(0 3px 5px rgba(0,0,0,.28));
 }
-.shop-item-img .emoji-icon { font-size: 52px; }
-#drag-ghost .emoji-icon { font-size: 40px; }
+.shop-item-img .item-svg { width: 64px; height: 64px; }
+#drag-ghost .item-svg { width: 48px; height: 48px; }
+.shop-cat-ico .item-svg { width: 26px; height: 26px; filter: none; }
+.side-ico img { width: 34px; height: 26px; object-fit: contain; }
+.shop-cat-ico img { width: 28px; height: 28px; object-fit: contain; }
+.card-hint { font-size: 9.5px; font-weight: 700; color: #a3815a; }
+.tray-empty {
+  flex: 1;
+  border: 3px dashed var(--wood);
+  border-radius: 16px;
+  background: rgba(253, 243, 220, .85);
+  color: var(--brown-txt);
+  font-size: 14px; font-weight: 800;
+  cursor: pointer;
+}
 
 /* ================= انتقال ابری بین شهر و مزرعه ================= */
 #clouds {
@@ -361,7 +381,7 @@ html, body {
 /* ================= درگ ================= */
 #drag-ghost {
   position: fixed; z-index: 300;
-  transform: translate(-50%, -55%);
+  transform: translate(-50%, -125%); /* بالای انگشت دیده شود */
   display: none;
   flex-direction: column; align-items: center;
   background: rgba(253, 243, 220, 0.92);
@@ -553,6 +573,14 @@ html, body {
   color: #ffe9b8; font-weight: 900; font-size: 15px;
 }
 .shop-wallet img { width: 26px; height: 26px; object-fit: contain; }
+.shop-hint {
+  background: #2a1808;
+  color: #e8c589;
+  font-size: 12.5px; font-weight: 700;
+  text-align: center;
+  padding: 7px 12px;
+  border-bottom: 2px solid var(--gold-dark);
+}
 
 .shop-body { display: flex; flex: 1; overflow: hidden; min-height: 0; }
 
@@ -661,8 +689,12 @@ html, body {
   border-color: #2c7c3a;
 }
 
-.shop-buy {
+.shop-actions {
   margin-top: 9px; width: 100%;
+  display: flex; gap: 7px;
+}
+.shop-buy {
+  flex: 1.15;
   display: flex; align-items: center; justify-content: center; gap: 7px;
   background: linear-gradient(180deg, #7fdc7f, #3ea750);
   border: 2px solid #2c7c3a;
@@ -676,6 +708,29 @@ html, body {
 .shop-buy img { width: 25px; height: 25px; object-fit: contain; }
 .shop-buy:active { transform: translateY(2px); box-shadow: 0 2px 0 #245c2e; }
 .shop-buy.pulse { animation: bump .35s ease; }
+.shop-actions .shop-buy { font-size: 13.5px; padding: 8px 6px; }
+.shop-actions .shop-buy img { width: 19px; height: 19px; }
+.shop-sell {
+  flex: 1;
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  background: linear-gradient(180deg, #ffe08a, #e8a33d);
+  border: 2px solid #b97a1e;
+  border-radius: 13px;
+  color: #4a2808; font-size: 13.5px; font-weight: 900;
+  padding: 8px 6px;
+  cursor: pointer;
+  box-shadow: 0 4px 0 #8a5a14, 0 8px 14px rgba(0,0,0,.2);
+}
+.shop-sell img { width: 19px; height: 19px; object-fit: contain; }
+.shop-sell:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 2px 0 #8a5a14; }
+.shop-sell:disabled {
+  background: linear-gradient(#d9d9d9, #b5b5b5);
+  border-color: #909090;
+  color: #777;
+  box-shadow: none;
+  cursor: default;
+}
+.shop-sell.pulse { animation: bump .35s ease; }
 
 /* پیام‌ها و دوستان */
 .mail-list {
@@ -776,18 +831,117 @@ html, body {
 
 /* ================= موبایل ================= */
 @media (max-width: 760px) {
-  .level-badge { width: 52px; height: 52px; font-size: 21px; }
-  .xp-wrap { min-width: 140px; padding: 5px 8px; }
-  .currency-row { font-size: 17px; min-width: 132px; padding: 4px 11px; }
-  .currency-row img { width: 32px; height: 32px; }
-  .hud-icon-btn { width: 44px; height: 44px; }
-  #hud-side { bottom: 118px; left: 8px; }
-  .side-btn { width: 66px; height: 62px; font-size: 11px; }
-  .side-ico { font-size: 20px; }
-  #tray { height: 100px; }
-  .card { flex: 0 0 102px; }
+  /* HUD فشرده */
+  #hud-topleft { top: 8px; left: 8px; gap: 6px; }
+  .level-badge { width: 44px; height: 44px; font-size: 18px; border-width: 3px; }
+  .xp-wrap { min-width: 104px; padding: 4px 7px; border-radius: 10px; }
+  .xp-bar { height: 11px; }
+  .xp-text { font-size: 9.5px; }
+  #hud-topright { top: 8px; right: 8px; gap: 5px; }
+  .currency-row { font-size: 14px; min-width: 104px; padding: 3px 9px; border-width: 2px; }
+  .currency-row img { width: 25px; height: 25px; }
+  .hud-icon-btn { width: 38px; height: 38px; border-radius: 11px; }
+  .ico { width: 23px; height: 23px; }
+
+  /* دکمه‌های کناری کوچک بالای سینی */
+  #hud-side { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); left: 6px; gap: 6px; }
+  .side-btn { width: 56px; height: 52px; font-size: 9.5px; border-radius: 12px; border-width: 2px; }
+  .side-ico { width: 21px; height: 21px; }
+  .side-ico .ico { width: 21px; height: 21px; }
+  .side-ico img { width: 27px; height: 20px; }
+  .badge { min-width: 19px; height: 19px; font-size: 11px; top: -5px; left: -5px; }
+
+  /* سینی تمام‌عرض پایین صفحه؛ فلش‌ها روی لمسی لازم نیستند */
+  #tray {
+    left: 0; right: 0; bottom: 0;
+    transform: none;
+    width: 100%;
+    height: calc(92px + env(safe-area-inset-bottom, 0px));
+    padding: 4px 6px calc(6px + env(safe-area-inset-bottom, 0px));
+    gap: 0;
+  }
+  .tray-arrow { display: none; }
+  .tray-scroll { gap: 7px; }
+  .card { flex: 0 0 86px; border-radius: 12px; padding: 4px 5px 5px; border-width: 2px; }
+  .card-title { font-size: 10px; }
+  .card-count { width: 23px; height: 23px; font-size: 11px; top: -6px; right: -6px; }
+  .card-img img { max-width: 46px; max-height: 36px; }
+  .card-img .item-svg { width: 32px; height: 32px; }
+  .card-hint { display: none; }
+  .tray-empty { font-size: 12px; }
+
+  /* توست و برچسب */
+  #toasts { top: 70px; width: 94vw; }
+  .toast { font-size: 12px; padding: 7px 12px; }
+  .plot-label { font-size: 11px; padding: 2px 8px; }
+  .plot-label.chat-bubble { font-size: 11px; max-width: 150px; }
+
+  /* مودال‌ها تقریباً تمام‌صفحه */
+  .modal { width: 96vw; max-height: 88dvh; border-radius: 16px; }
+  .shop-header { padding: 9px 12px; flex-wrap: wrap; gap: 6px; }
+  .shop-header h2 { font-size: 16px; }
+  .modal-close { width: 34px; height: 34px; font-size: 15px; }
+
+  /* فروشگاه موبایل: دسته‌ها افقی بالا، آیتم‌ها دو ستونه با دکمه‌های دیده‌شدنی */
+  .panel-shop { width: 97vw; height: 90dvh; border-radius: 16px; }
+  .panel-shop .shop-header { padding: 8px 10px; }
+  .panel-shop .shop-header h2 { font-size: 17px; }
+  .shop-wallet { gap: 6px; }
+  .shop-wallet span { font-size: 12px; padding: 3px 9px; }
+  .shop-wallet img { width: 19px; height: 19px; }
+  .shop-hint { font-size: 10.5px; padding: 5px 8px; }
   .shop-body { flex-direction: column; }
-  .shop-cats { width: 100%; flex-direction: row; overflow-x: auto; }
-  .shop-cat { flex: 1; white-space: nowrap; padding: 8px; font-size: 12.5px; }
-  .shop-grid { grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); }
+  .shop-cats {
+    width: 100%;
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 8px;
+    gap: 7px;
+    border-left: none;
+    border-bottom: 3px solid var(--gold-dark);
+    flex: 0 0 auto;
+  }
+  .shop-cat {
+    flex: 1 0 auto;
+    flex-direction: row;
+    white-space: nowrap;
+    padding: 7px 10px;
+    font-size: 12px;
+    border-radius: 10px;
+  }
+  .shop-cat-ico img, .shop-cat-ico .item-svg { width: 20px; height: 20px; }
+  .shop-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+    padding: 10px;
+  }
+  .shop-item { padding: 10px 8px 9px; border-radius: 13px; border-width: 2px; }
+  .shop-item-img { width: 60px; height: 60px; border-radius: 12px; }
+  .shop-item-img img { max-width: 46px; max-height: 46px; }
+  .shop-item-img .item-svg { width: 42px; height: 42px; }
+  .shop-item-name { font-size: 13px; margin-top: 6px; }
+  .shop-item-desc { font-size: 9.5px; min-height: 0; line-height: 1.6; }
+  .shop-item-have { font-size: 10px; margin-top: 3px; }
+  .shop-qty { margin-top: 6px; gap: 4px; }
+  .qty-btn { padding: 4px 8px; font-size: 11px; }
+  .shop-actions { flex-direction: column; gap: 5px; margin-top: 7px; }
+  .shop-actions .shop-buy, .shop-sell {
+    width: 100%;
+    font-size: 12.5px;
+    padding: 8px 4px;
+    border-radius: 10px;
+  }
+
+  /* پنل‌های دیگر */
+  .panel-building { width: 94vw; }
+  .building-desc { font-size: 13px; }
+  .building-action { width: 100%; padding: 12px 10px; font-size: 15px; }
+  .mail-row, .friend-row { padding: 9px; gap: 8px; }
+  .mail-claim, .friend-visit { padding: 7px 11px; font-size: 12px; white-space: nowrap; }
+}
+
+@media (max-width: 380px) {
+  .xp-wrap { display: none; } /* خیلی باریک: فقط نشان لول و پول‌ها بمانند */
+  .shop-item-desc { display: none; }
 }

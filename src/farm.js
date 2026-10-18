@@ -360,7 +360,7 @@ export class Farm {
       const crop = CROPS[plot.crop];
       return {
         plotId: plot.id,
-        x: at.x, z: at.z + 1.3,   // جلوی جایگاه می‌ایستد (جایگاه‌ها به هم چسبیده‌اند)
+        x: at.x, z: at.z + 1.04,   // دقیقاً وسط راهروی بین دو ردیف می‌ایستد (داخل جایگاه بغلی نمی‌رود)
         faceX: at.x, faceZ: at.z,   // رو به محصول
         cropName: crop ? crop.name : 'محصول',
         decision,

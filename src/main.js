@@ -52,7 +52,7 @@ function boot() {
     world.addSprite({ tag: 'portal:farmhouse', file: 'Farm.png', x: fh.x, z: fh.z, width: fh.w, y: 0.02 });
     const sp = world.getSprite('portal:farmhouse');
     const labelY = sp ? sp.scale.y + 0.35 : 3.5;
-    ui.showPlotLabel('farmhouse', fh.x, fh.z, 'خانه‌ی مزرعه — برگشت به شهر 🏘️', labelY);
+    ui.showPlotLabel('farmhouse', fh.x, fh.z, 'خانه‌ی مزرعه — برگشت به شهر', labelY);
     const el = ui.plotLabels.get('farmhouse');
     if (el) el.classList.add('building-label');
   }
@@ -62,10 +62,21 @@ function boot() {
   obstacles.spawnAll();
   constructions.spawnAll();
 
-  // ---------- رفت‌وبرگشت بین شهر و مزرعه با ابرها ----------
+  // ---------- رفت‌وبرگشت بین شهر و مزرعه ----------
+  // نقشه یکپارچه است: با کشیدن روی نقشه هم می‌توانی از شهر به مزرعه بروی
+  // (بینشان جنگل است). ابرها فقط راهِ سریع‌اند.
   let currentArea = 'town';
+  function syncAreaByCamera() {
+    const key = world.panTarget.z > 40 ? 'farm' : 'town';
+    if (key !== currentArea) {
+      currentArea = key;
+      world.area = AREAS[key];
+      ui.setAreaButton(key);
+    }
+    return key;
+  }
   function goToArea(areaKey) {
-    if (areaKey === currentArea || ui.cloudBusy) return;
+    if (ui.cloudBusy) return;
     sfx.whoosh();
     ui.cloudTransition(() => {
       currentArea = areaKey;
@@ -76,17 +87,17 @@ function boot() {
       ui.refreshLabels();
       setTimeout(() => {
         ui.toast(areaKey === 'farm'
-          ? 'به مزرعه رسیدی! 🌾 اینجا زمین زیر جنگله؛ درخت و سنگ‌ها رو با سکه پاک کن و کشت کن.'
-          : 'به شهر برگشتی! 🏘️');
+          ? 'به مزرعه رسیدی! اینجا زمین زیر جنگله؛ درخت و سنگ‌ها رو پاک کن و کشت کن.'
+          : 'به شهر برگشتی!');
       }, 450);
     });
   }
-  ui.onAreaToggle = () => goToArea(currentArea === 'town' ? 'farm' : 'town');
+  ui.onAreaToggle = () => goToArea(world.panTarget.z > 40 ? 'town' : 'farm');
   ui.onFocusFarm = () => goToArea('farm');
 
   ui.onDropItem = (itemId, target) => {
     if (isBuildItem(itemId)) {
-      constructions.placeFromCard(itemId, target.point, currentArea);
+      constructions.placeFromCard(itemId, target.point); // ناحیه از روی نقطه معلوم می‌شود
     } else {
       farm.applyItem(itemId, target.plotId, target.point);
     }
@@ -96,7 +107,7 @@ function boot() {
   };
   ui.canPlaceAt = (itemId, point) => {
     if (itemId === 'plot') return farm.canPlacePlotAt(point);
-    if (isBuildItem(itemId)) return constructions.canPlace(itemId, point, currentArea);
+    if (isBuildItem(itemId)) return constructions.canPlace(itemId, point);
     return true;
   };
 
@@ -132,6 +143,9 @@ function boot() {
   let down = null;
   let panning = false;
   let dragging = null; // { kind, id, mesh, from, target, valid, targetCell }
+  const activePointers = new Map(); // برای زوم دو انگشتی (پینچ) روی موبایل
+  let pinch = null;
+  let pinching = false;
 
   function startMove(d) {
     const mesh = d.mesh;
@@ -147,10 +161,45 @@ function boot() {
     ui.toast('بکش و در جای مناسب رها کن ✋ (سبز = مجاز)');
   }
 
+  // شروع درگ یک سازه — سازه‌های هم‌نوعِ چسبیده، با هم می‌آیند
+  function startStructureMove(mesh, ground) {
+    const st = constructions.structureAt(mesh);
+    if (!st) return false;
+    const grabCell = constructions.anchorCellForPoint(ground, st.area);
+    if (!grabCell) return false;
+    const group = constructions.groupOf(st);
+    dragging = {
+      kind: 'structure', st, group, grabCell,
+      delta: { gx: 0, gz: 0 }, valid: true,
+    };
+    panning = false;
+    constructions.lastClick = { id: null, time: 0 }; // درگ، دبل‌کلیک حساب نمی‌شود
+    canvas.classList.add('grabbing');
+    sfx.whoosh();
+    ui.toast(group.length > 1
+      ? `${group.length} سازه‌ی چسبیده با هم جابجا می‌شوند — بکش و رها کن`
+      : 'بکش و در جای مناسب رها کن (سبز = مجاز)');
+    return true;
+  }
+
   function moveUpdate(clientX, clientY) {
     if (!dragging) return;
     const ground = world.pickGround(clientX, clientY);
     if (!ground) return;
+
+    if (dragging.kind === 'structure') {
+      const cellNow = constructions.anchorCellForPoint(ground, dragging.st.area);
+      if (!cellNow) return;
+      const dgx = cellNow.gx - dragging.grabCell.gx;
+      const dgz = cellNow.gz - dragging.grabCell.gz;
+      dragging.delta = { gx: dgx, gz: dgz };
+      dragging.valid = constructions.canMoveGroup(dragging.group, dgx, dgz);
+      constructions.previewGroup(dragging.group, dgx, dgz);
+      const b = constructions.groupBounds(dragging.group, dgx, dgz);
+      world.showPlacementGhostRect(b.x, b.z, b.w + 0.35, b.d + 0.35, dragging.valid);
+      return;
+    }
+
     let x = ground.x, z = ground.z;
     let valid = true;
 
@@ -226,6 +275,23 @@ function boot() {
     world.hidePlacementGhost();
     canvas.classList.remove('grabbing');
 
+    if (d.kind === 'structure') {
+      const dg = d.delta || { gx: 0, gz: 0 };
+      if ((dg.gx || dg.gz) && d.valid && constructions.moveGroup(d.group, dg.gx, dg.gz)) {
+        sfx.pop();
+        ui.toast(d.group.length > 1 ? 'سازه‌ها با هم جابجا شدند!' : 'سازه جابجا شد!');
+      } else {
+        constructions.restoreGroup(d.group);
+        if (dg.gx || dg.gz) {
+          sfx.error();
+          ui.toast('اینجا جای مجازی نیست!');
+        }
+      }
+      save();
+      ui.refreshLabels();
+      return;
+    }
+
     if (!d.valid || !d.target) {
       d.mesh.position.x = d.from.x;
       d.mesh.position.z = d.from.z;
@@ -264,11 +330,34 @@ function boot() {
   // ---------- ورودی‌های صفحه ----------
   canvas.addEventListener('pointerdown', (e) => {
     try {
+      // زوم دو انگشتی (پینچ) روی موبایل
+      activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (activePointers.size === 2) {
+        const [p1, p2] = [...activePointers.values()];
+        pinch = { d: Math.hypot(p1.x - p2.x, p1.y - p2.y) || 1, zoom: world.zoom };
+        pinching = true;
+        if (dragging) {
+          if (dragging.kind === 'structure') constructions.restoreGroup(dragging.group);
+          else if (dragging.mesh) {
+            dragging.mesh.position.x = dragging.from.x;
+            dragging.mesh.position.z = dragging.from.z;
+            if (dragging.kind === 'plot') farm.syncPlot(dragging.id.slice(5));
+          }
+          dragging = null;
+        }
+        down = null;
+        panning = false;
+        world.hidePlacementGhost();
+        try { canvas.setPointerCapture(e.pointerId); } catch (_) { /* ok */ }
+        return;
+      }
+
       const mesh = world.pick(e.clientX, e.clientY);
       down = {
         x: e.clientX, y: e.clientY,
         time: performance.now(),
         mesh,
+        ground: world.pickGround(e.clientX, e.clientY),
         moved: false,
       };
       const type = mesh && mesh.userData.type;
@@ -277,10 +366,10 @@ function boot() {
         if (ob) obstacles.setHover(ob);
         panning = true;
         canvas.setPointerCapture(e.pointerId);
-      } else if (type === 'building' || type === 'plot') {
+      } else if (type === 'building' || type === 'plot' || type === 'structure') {
         canvas.setPointerCapture(e.pointerId);
       } else {
-        // سازه، دروازه و زمین خالی: کلیک یا پن دوربین
+        // دروازه و زمین خالی: کلیک یا پن دوربین (کشیدن روی کل نقشه)
         panning = true;
         canvas.setPointerCapture(e.pointerId);
         if (!mesh) canvas.classList.add('grabbing');
@@ -292,6 +381,17 @@ function boot() {
 
   canvas.addEventListener('pointermove', (e) => {
     try {
+      if (activePointers.has(e.pointerId)) {
+        activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      }
+      if (pinching && pinch && activePointers.size >= 2) {
+        const [p1, p2] = [...activePointers.values()];
+        const nd = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+        if (nd > 10) world.zoomTo(pinch.zoom * (nd / pinch.d));
+        ui.refreshLabels();
+        return;
+      }
+
       if (!down && !dragging) {
         const mesh = world.pick(e.clientX, e.clientY);
         obstacles.setHover(mesh ? obstacles.obstacleAt(mesh) : null);
@@ -309,10 +409,15 @@ function boot() {
       const dy = e.clientY - down.y;
       if (Math.abs(dx) + Math.abs(dy) > 8) down.moved = true;
 
+      const downType = down.mesh && down.mesh.userData.type;
       if (down.mesh && down.moved && !panning &&
-          (down.mesh.userData.type === 'building' || down.mesh.userData.type === 'plot')) {
-        startMove(down);
-        moveUpdate(e.clientX, e.clientY);
+          (downType === 'building' || downType === 'plot' || downType === 'structure')) {
+        if (downType === 'structure') {
+          if (!startStructureMove(down.mesh, down.ground)) panning = true;
+        } else {
+          startMove(down);
+        }
+        if (dragging) moveUpdate(e.clientX, e.clientY);
         down.x = e.clientX; down.y = e.clientY;
       } else if (panning && down.moved) {
         world.panBy(dx, dy);
@@ -327,6 +432,14 @@ function boot() {
 
   const finishPointer = (e) => {
     try {
+      activePointers.delete(e.pointerId);
+      if (pinching) {
+        // پایان ژست دو انگشتی کلیک حساب نمی‌شود
+        if (activePointers.size === 0) { pinching = false; pinch = null; }
+        down = null;
+        panning = false;
+        return;
+      }
       if (dragging) {
         endMove();
         down = null;
@@ -366,9 +479,21 @@ function boot() {
           ui.refreshTray();
         }
       } else if (isClick && !down.mesh) {
-        obstacles.deselect();
+        // پاک‌کردن درخت/سنگ/علف جنگل با یک کلیک (برای بازکردن راه و جاده)
+        const ground = world.pickGround(e.clientX, e.clientY);
+        const rec = decor.tryRemoveAt(e.clientX, e.clientY, ground);
+        if (rec) {
+          world.explode(rec.x, 0.5, rec.z, rec.type === 'rock' ? 0xbfc7cc : 0x7fc95a);
+          sfx.boom();
+          ui.toast(rec.type === 'tree'
+            ? 'درخت جنگلی پاک شد! کم‌کم می‌شود بین شهر و مزرعه راه باز کرد.'
+            : rec.type === 'rock' ? 'سنگ جنگلی پاک شد!' : 'علف پاک شد!');
+        } else {
+          obstacles.deselect();
+        }
       }
 
+      syncAreaByCamera(); // اگر با کشیدن نقشه به سمت دیگر رفتی، دکمه هم عوض شود
       down = null;
       panning = false;
     } catch (err) {
@@ -403,13 +528,13 @@ function boot() {
 
   // خوش‌آمد
   setTimeout(() => {
-    ui.toast('به شهر لوکو خوش آمدی! 🌳 برای کشاورزی روی ساختمان «مزرعه» کلیک کن تا با ابرها بری به فضای مزرعه ☁️');
+    ui.toast('به شهر لوکو خوش آمدی! فعلاً سکه‌ات بی‌نهایت است تا راحت همه‌چیز را امتحان کنی. نقشه را با انگشت بکش تا از شهر به مزرعه بروی (یا روی ساختمان مزرعه کلیک کن).');
   }, 600);
   setTimeout(() => {
-    ui.toast('دور شهر و مزرعه جنگل انبوهه! 🌲 درخت/سنگ‌ها رو با کلیک و سکه پاک کن تا جا باز بشه. از فروشگاه هم می‌تونی حصار و دیوار بخری و دیوارکشی کنی 🧱');
+    ui.toast('همه‌جای دور نقشه جنگل است. روی هر درخت، سنگ یا علف جنگل کلیک کنی پاک می‌شود؛ این‌طوری بین شهر و مزرعه راه باز می‌شود.');
   }, 5200);
   setTimeout(() => {
-    ui.toast('توی مزرعه حیوانات هم هستن 🐄 و جایگاه‌ها کامل به هم می‌چسبن. با دکمه‌ی سبز کنار صفحه بین شهر و مزرعه جابجا شو.');
+    ui.toast('از فروشگاه دسته‌بندی‌شده بخر تا به کارت‌های پایین اضافه شود؛ از همان‌جا می‌توانی بفروشی هم. دیوارها و حصارها را با درگ جابجا کن — چندتای چسبیده با هم می‌آیند!');
   }, 11500);
 }
 

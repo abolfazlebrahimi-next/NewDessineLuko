@@ -10,7 +10,11 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as skeletonClone } from 'three/examples/jsm/utils/SkeletonUtils.js';
-import { CHARACTERS, LAYOUT, CHAT_DIALOGUES, CUSTOMER_LINES } from './config.js';
+import { CHARACTERS, LAYOUT, CHAT_DIALOGUES, CUSTOMER_LINES, STRUCTURES } from './config.js';
+import { state, getBuildingPos, cellPosition } from './state.js';
+
+// مبدا شبکه‌ی سازه‌ها (مثل constructions.js) برای محاسبه‌ی برخورد دیوار/حصار
+const STRUCT_ORIGINS = { town: { x: 0, z: 2 }, farm: { x: 0, z: 75 } };
 
 const S = {
   IDLE: 'idle',
@@ -45,6 +49,8 @@ export class Characters {
     this.seq = 0;
     this.customer = null;
     this.chatTimer = 5 + Math.random() * 4;
+    this._colliders = null;     // کش مستطیل‌های برخورد (ساختمان/جایگاه/دیوار/…)
+    this._collidersAt = 0;
   }
 
   async init() {
@@ -128,11 +134,22 @@ export class Characters {
     this.group.add(sh);
     this.group.add(model);
 
+    // اگر نقطه‌ی ظاهرشدن داخل ساختمان/جایگاه/دیوار بود، به نزدیک‌ترین جای آزاد هلش بده
+    if (!this.isFree(model.position.x, model.position.z)) {
+      const free = this._nearestFreePoint(model.position.x, model.position.z);
+      model.position.x = free.x;
+      model.position.z = free.z;
+      sh.position.set(free.x, 0.025, free.z);
+    }
+
     const person = {
       id: 'person_' + (this.seq++),
       role, area, model, mixer, actions, limbs, shadow: sh,
       state: S.IDLE,
       target: null,
+      path: null,        // مسیر محاسبه‌شده دور موانع (نقطه‌های راه)
+      stuckT: 0,
+      replanAt: 0,
       timer: 0.5 + Math.random() * 2.5,
       speed: CHARACTERS.speed * (0.85 + Math.random() * 0.35),
       insideTimer: 0,
@@ -255,18 +272,303 @@ export class Characters {
     return { x, z: z + 1.6 };
   }
 
+  // ---------- ناوبری: آدمک‌ها از وسط اشیا رد نمی‌شوند ----------
+  // مستطیل‌های برخوردِ همه‌ی چیزهای روی نقشه: ساختمان‌ها، خانه‌ی مزرعه،
+  // جایگاه‌های کشت، درخت/سنگ‌ها، سازه‌های بازیکن (دیوار/حصار/چادر/خانه) و آغل.
+  _colliderRects() {
+    const now = performance.now();
+    if (this._colliders && now - this._collidersAt < 1000) return this._colliders;
+    const rects = [];
+    const add = (x, z, rx, rz) => rects.push({ x, z, rx, rz });
+
+    for (const b of LAYOUT.buildings) {
+      const pos = getBuildingPos(b.id, b.x, b.z);
+      add(pos.x, pos.z, b.w * 0.42, Math.max(0.7, b.w * 0.17));
+    }
+    const fh = LAYOUT.farmhouse;
+    add(fh.x, fh.z, fh.w * 0.42, Math.max(0.7, fh.w * 0.17));
+
+    for (const p of state.plots) {
+      const cp = cellPosition(p.cell);
+      add(cp.x, cp.z, 0.88, 0.62);
+    }
+    for (const ob of state.obstacles) {
+      if (ob.kind === 'tree') add(ob.x, ob.z, 0.72, 0.52);
+      else add(ob.x, ob.z, 0.58, 0.44);
+    }
+    const scell = STRUCTURES.cell;
+    for (const st of state.structures) {
+      const spec = STRUCTURES.kinds[st.kind];
+      if (!spec) continue;
+      const o = STRUCT_ORIGINS[st.area] || STRUCT_ORIGINS.town;
+      const cx = o.x + (st.gx + spec.cells / 2) * scell;
+      const cz = o.z + (st.gz + spec.cells / 2) * scell;
+      if (spec.rotatable) {
+        // حصار/دیوار باریک‌اند؛ ضخامت کم، طول یک خانه
+        if (st.rot) add(cx, cz, 0.2, scell / 2);
+        else add(cx, cz, scell / 2, 0.2);
+      } else {
+        const h = (spec.cells * scell) / 2 * 0.82;
+        add(cx, cz, h, h);
+      }
+    }
+    const pen = LAYOUT.animalPen; // آدم‌ها داخل آغل نمی‌روند
+    add((pen.minX + pen.maxX) / 2, (pen.minZ + pen.maxZ) / 2,
+      (pen.maxX - pen.minX) / 2, (pen.maxZ - pen.minZ) / 2);
+
+    this._colliders = rects;
+    this._collidersAt = now;
+    return rects;
+  }
+
+  // آیا نقطه آزاد است؟ (با حاشیه‌ی شعاع بدن آدمک)
+  isFree(x, z, pad = 0.26) {
+    for (const r of this._colliderRects()) {
+      if (Math.abs(x - r.x) < r.rx + pad && Math.abs(z - r.z) < r.rz + pad) return false;
+    }
+    return true;
+  }
+
+  _nearestFreePoint(x, z) {
+    if (this.isFree(x, z)) return { x, z };
+    for (let r = 0.4; r <= 3.4; r += 0.4) {
+      const steps = Math.max(8, Math.floor(r * 10));
+      for (let i = 0; i < steps; i++) {
+        const a = (i / steps) * Math.PI * 2;
+        const nx = x + Math.cos(a) * r;
+        const nz = z + Math.sin(a) * r;
+        if (this.isFree(nx, nz)) return { x: nx, z: nz };
+      }
+    }
+    return { x, z };
+  }
+
+  _randomFreePoint(person) {
+    const w = this._wanderOf(person);
+    let pt = this._randomPointIn(w);
+    for (let i = 0; i < 14; i++) {
+      if (this.isFree(pt.x, pt.z)) return pt;
+      pt = this._randomPointIn(w);
+    }
+    return this._nearestFreePoint(pt.x, pt.z);
+  }
+
+  // مسیریابی A* روی شبکه‌ی کل نقشه — دور همه‌ی موانع
+  _findPath(from, to) {
+    const CELL = 0.8, MINX = -20, MINZ = -11, W = 50, H = 132;
+    const idx = (cx, cz) => cz * W + cx;
+    const clampI = (v, m) => Math.max(0, Math.min(m - 1, v));
+    const toCell = (x, z) => ({
+      cx: clampI(Math.floor((x - MINX) / CELL), W),
+      cz: clampI(Math.floor((z - MINZ) / CELL), H),
+    });
+    const center = (cx, cz) => ({ x: MINX + (cx + 0.5) * CELL, z: MINZ + (cz + 0.5) * CELL });
+
+    const blocked = new Uint8Array(W * H);
+    for (const r of this._colliderRects()) {
+      const x0 = clampI(Math.floor((r.x - r.rx - 0.3 - MINX) / CELL), W);
+      const x1 = clampI(Math.floor((r.x + r.rx + 0.3 - MINX) / CELL), W);
+      const z0 = clampI(Math.floor((r.z - r.rz - 0.3 - MINZ) / CELL), H);
+      const z1 = clampI(Math.floor((r.z + r.rz + 0.3 - MINZ) / CELL), H);
+      for (let cz = z0; cz <= z1; cz++) {
+        for (let cx = x0; cx <= x1; cx++) blocked[idx(cx, cz)] = 1;
+      }
+    }
+
+    const findFreeCell = (c) => {
+      if (!blocked[idx(c.cx, c.cz)]) return c;
+      const seen = new Uint8Array(W * H);
+      const queue = [idx(c.cx, c.cz)];
+      seen[queue[0]] = 1;
+      while (queue.length) {
+        const cur = queue.shift();
+        const cx = cur % W, cz = Math.floor(cur / W);
+        if (!blocked[cur]) return { cx, cz };
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = cx + dx, nz = cz + dz;
+          if (nx < 0 || nz < 0 || nx >= W || nz >= H) continue;
+          const ni = idx(nx, nz);
+          if (!seen[ni]) { seen[ni] = 1; queue.push(ni); }
+        }
+        if (queue.length > 900) break;
+      }
+      return null;
+    };
+
+    let s = toCell(from.x, from.z);
+    let g0 = toCell(to.x, to.z);
+    const goalBlocked = blocked[idx(g0.cx, g0.cz)] === 1;
+    s = findFreeCell(s);
+    const g = findFreeCell(g0);
+    if (!s || !g) return null;
+    const finalPoint = goalBlocked ? center(g.cx, g.cz) : { x: to.x, z: to.z };
+
+    const gScore = new Float32Array(W * H).fill(Infinity);
+    const came = new Int32Array(W * H).fill(-1);
+    const closed = new Uint8Array(W * H);
+    const heapF = [], heapI = [];
+    const push = (f, i) => {
+      heapF.push(f); heapI.push(i);
+      let c = heapF.length - 1;
+      while (c > 0) {
+        const p = (c - 1) >> 1;
+        if (heapF[p] <= heapF[c]) break;
+        [heapF[p], heapF[c]] = [heapF[c], heapF[p]];
+        [heapI[p], heapI[c]] = [heapI[c], heapI[p]];
+        c = p;
+      }
+    };
+    const pop = () => {
+      const top = heapI[0];
+      const lf = heapF.pop(), li = heapI.pop();
+      if (heapF.length) {
+        heapF[0] = lf; heapI[0] = li;
+        let c = 0;
+        for (;;) {
+          const l = c * 2 + 1, r = l + 1;
+          let m = c;
+          if (l < heapF.length && heapF[l] < heapF[m]) m = l;
+          if (r < heapF.length && heapF[r] < heapF[m]) m = r;
+          if (m === c) break;
+          [heapF[m], heapF[c]] = [heapF[c], heapF[m]];
+          [heapI[m], heapI[c]] = [heapI[c], heapI[m]];
+          c = m;
+        }
+      }
+      return top;
+    };
+    const heuristic = (cx, cz) => {
+      const dx = Math.abs(cx - g.cx), dz = Math.abs(cz - g.cz);
+      return (dx + dz) + (Math.SQRT2 - 2) * Math.min(dx, dz);
+    };
+
+    const startI = idx(s.cx, s.cz), goalI = idx(g.cx, g.cz);
+    gScore[startI] = 0;
+    push(heuristic(s.cx, s.cz), startI);
+    let found = startI === goalI;
+    let guard = 0;
+    while (heapF.length && guard++ < 9000) {
+      const cur = pop();
+      if (cur === goalI) { found = true; break; }
+      if (closed[cur]) continue;
+      closed[cur] = 1;
+      const cx = cur % W, cz = Math.floor(cur / W);
+      for (let dz = -1; dz <= 1; dz++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (!dx && !dz) continue;
+          const nx = cx + dx, nz = cz + dz;
+          if (nx < 0 || nz < 0 || nx >= W || nz >= H) continue;
+          const ni = idx(nx, nz);
+          if (blocked[ni] || closed[ni]) continue;
+          // حرکت قطری از گوشه‌ی دیوار رد نمی‌شود
+          if (dx && dz && (blocked[idx(cx + dx, cz)] || blocked[idx(cx, cz + dz)])) continue;
+          const cost = gScore[cur] + (dx && dz ? Math.SQRT2 : 1);
+          if (cost < gScore[ni]) {
+            gScore[ni] = cost;
+            came[ni] = cur;
+            push(cost + heuristic(nx, nz), ni);
+          }
+        }
+      }
+    }
+    if (!found && came[goalI] === -1 && goalI !== startI) return null;
+
+    // بازسازی + ساده‌سازی مسیر (حذف نقطه‌های هم‌راستا)
+    const cells = [];
+    let cur = goalI;
+    while (cur !== -1) {
+      cells.push(cur);
+      if (cur === startI) break;
+      cur = came[cur];
+    }
+    cells.reverse();
+    const pts = [];
+    let prevDir = null;
+    for (let i = 1; i < cells.length; i++) {
+      const cx = cells[i] % W, cz = Math.floor(cells[i] / W);
+      const px = cells[i - 1] % W, pz = Math.floor(cells[i - 1] / W);
+      const dir = Math.sign(cx - px) + ',' + Math.sign(cz - pz);
+      if (dir !== prevDir || i === cells.length - 1) {
+        pts.push(center(cx, cz));
+        prevDir = dir;
+      }
+    }
+    if (!pts.length) pts.push(finalPoint);
+    else pts[pts.length - 1] = finalPoint;
+    return pts;
+  }
+
+  // مقصد جدید با مسیر دور موانع
+  _setDest(p, x, z) {
+    const pos = p.model.position;
+    const pts = this._findPath({ x: pos.x, z: pos.z }, { x, z });
+    if (pts && pts.length) {
+      p.path = pts;
+      p.target = { ...pts[pts.length - 1] };
+    } else {
+      p.path = null;
+      p.target = { x, z };
+    }
+    p.stuckT = 0;
+    p.replanAt = 0;
+  }
+
   _moveToward(p, dt, arriveDist = 0.24) {
     if (!p.target) { p.moving = false; return true; }
     const pos = p.model.position;
-    const dx = p.target.x - pos.x;
-    const dz = p.target.z - pos.z;
-    const d = Math.hypot(dx, dz);
-    if (d < arriveDist) { p.moving = false; return true; }
+
+    let wp = (p.path && p.path.length) ? p.path[0] : p.target;
+    let dx = wp.x - pos.x;
+    let dz = wp.z - pos.z;
+    let d = Math.hypot(dx, dz);
+    while (p.path && p.path.length > 1 && d < 0.22) {
+      p.path.shift();
+      wp = p.path[0];
+      dx = wp.x - pos.x;
+      dz = wp.z - pos.z;
+      d = Math.hypot(dx, dz);
+    }
+
+    const distFinal = Math.hypot(p.target.x - pos.x, p.target.z - pos.z);
+    if ((!p.path || p.path.length <= 1) && distFinal < arriveDist) {
+      p.moving = false;
+      p.path = null;
+      return true;
+    }
+    if (d < 0.04) {
+      if (p.path && p.path.length > 1) { p.path.shift(); return false; }
+      p.moving = false;
+      return true;
+    }
+
     const stepLen = Math.min(d, p.speed * dt);
-    pos.x += (dx / d) * stepLen;
-    pos.z += (dz / d) * stepLen;
+    const nx = pos.x + (dx / d) * stepLen;
+    const nz = pos.z + (dz / d) * stepLen;
+    if (this.isFree(nx, nz)) {
+      pos.x = nx; pos.z = nz; p.stuckT = 0;
+    } else if (this.isFree(nx, pos.z)) {
+      pos.x = nx; p.stuckT = 0; // سرخوردن کنار مانع
+    } else if (this.isFree(pos.x, nz)) {
+      pos.z = nz; p.stuckT = 0;
+    } else {
+      // گیر کرده: یک بار مسیر تازه حساب کن؛ اگر باز نشد این پا را رها کن
+      p.stuckT = (p.stuckT || 0) + dt;
+      const now = performance.now();
+      if (now > (p.replanAt || 0)) {
+        p.replanAt = now + 1500;
+        const pts = this._findPath({ x: pos.x, z: pos.z }, p.target);
+        if (pts && pts.length) p.path = pts;
+      }
+      if (p.stuckT > 1.4) {
+        p.moving = false;
+        p.path = null;
+        return true;
+      }
+      p.moving = false;
+      return false;
+    }
     p.moving = true;
-    this._faceToward(p, p.target.x, p.target.z, dt);
+    this._faceToward(p, wp.x, wp.z, dt);
     return false;
   }
 
@@ -295,12 +597,13 @@ export class Characters {
     // فقط اهالی شهر داخل ساختمان‌ها می‌روند؛ اهالی مزرعه دور زمین می‌گردند
     if (person.area === 'town' && Math.random() < CHARACTERS.enterChance) {
       const b = pick(LAYOUT.buildings);
-      person.target = this._buildingDoor(b);
+      const door = this._buildingDoor(b);
+      this._setDest(person, door.x, door.z);
       person.enterBuilding = b;
       return;
     }
     person.enterBuilding = null;
-    person.target = this._randomPoint(person);
+    { const pt = this._randomFreePoint(person); this._setDest(person, pt.x, pt.z); }
   }
 
   // ---------- گپ دونفره ----------
@@ -338,7 +641,8 @@ export class Characters {
     b.chat = chat; b.chatIdx = 1; b.enterBuilding = null;
     a.chatSlot = { x: mx - dx * 0.38, z: mz - dz * 0.38 };
     b.chatSlot = { x: mx + dx * 0.38, z: mz + dz * 0.38 };
-    a.target = a.chatSlot; b.target = b.chatSlot;
+    this._setDest(a, a.chatSlot.x, a.chatSlot.z);
+    this._setDest(b, b.chatSlot.x, b.chatSlot.z);
     a.state = S.TO_CHAT; b.state = S.TO_CHAT;
   }
 
@@ -402,7 +706,7 @@ export class Characters {
       phase: 'go', timer: 0, bought: false,
     };
     person.state = S.CUST_WALK;
-    person.target = { x: stops[0].x, z: stops[0].z };
+    this._setDest(person, stops[0].x, stops[0].z);
     this.customer = person;
     this._say(person, pick(CUSTOMER_LINES.arrive), 2.4);
     return true;
@@ -416,10 +720,10 @@ export class Characters {
     if (c.idx < c.stops.length) {
       c.phase = 'go';
       p.state = S.CUST_WALK;
-      p.target = { x: c.stops[c.idx].x, z: c.stops[c.idx].z };
+      this._setDest(p, c.stops[c.idx].x, c.stops[c.idx].z);
     } else {
       p.state = S.CUST_LEAVE;
-      p.target = { x: c.gateX, z: CHARACTERS.gate.z };
+      this._setDest(p, c.gateX, CHARACTERS.gate.z);
     }
   }
 
@@ -499,7 +803,7 @@ export class Characters {
 
       if (c.phase === 'thanks') {
         p.state = S.CUST_LEAVE;
-        p.target = { x: c.gateX, z: CHARACTERS.gate.z };
+        this._setDest(p, c.gateX, CHARACTERS.gate.z);
       }
       return;
     }
@@ -571,7 +875,7 @@ export class Characters {
           if (p.insideTimer <= 0) {
             this._fade(p, true);
             p.enterBuilding = null;
-            p.target = this._randomPoint(p);
+            { const pt = this._randomFreePoint(p); this._setDest(p, pt.x, pt.z); }
             p.state = S.WALK;
             this._playAction(p, 'walk');
           }

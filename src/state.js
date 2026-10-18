@@ -1,8 +1,8 @@
 // ================= وضعیت بازی + ذخیره‌سازی =================
-import { START, LAYOUT, OBSTACLES, obstacleCost, xpForLevel, TIMING } from './config.js';
+import { START, LAYOUT, OBSTACLES, obstacleCost, xpForLevel, TIMING, TEST_MODE, INFINITE_BALANCE } from './config.js';
 
 const KEY = 'luko-city-save-v1';
-const SAVE_VERSION = 3;
+const SAVE_VERSION = 4;
 
 // مولد عدد تصادفی با بذر ثابت — تا چیدمان اولیه‌ی موانع برای همه یکسان و متعادل باشد
 function mulberry32(seed) {
@@ -120,6 +120,7 @@ export const state = {
   clearedCells: [...LAYOUT.starterClearedCells],
   obstacles: generateObstacles(LAYOUT.starterClearedCells, LAYOUT.starterPlotCells),
   structures: [],         // سازه‌های ساخته‌ی بازیکن: حصار، دیوار، چادر، خانه
+  removedDecor: [],       // آیدی درخت/سنگ/علف‌های جنگل که بازیکن پاک کرده
   buildingPos: {},        // id -> {x, z} موقعیت سفارشی ساختمان‌ها
   cooldowns: {},          // buildingId -> timestamp
   sound: true,
@@ -154,6 +155,7 @@ export function save() {
         clearedCells: state.clearedCells,
         obstacles: state.obstacles,
         structures: state.structures,
+        removedDecor: state.removedDecor,
         buildingPos: state.buildingPos,
         cooldowns: state.cooldowns,
         sound: state.sound,
@@ -177,6 +179,13 @@ export function load() {
       cooldowns: data.cooldowns || {},
       sound: data.sound ?? true,
     });
+    if (TEST_MODE.infiniteMoney) {
+      state.coins = INFINITE_BALANCE;
+      state.dew = INFINITE_BALANCE;
+    }
+    if (Array.isArray(data.removedDecor)) {
+      state.removedDecor = data.removedDecor.filter(n => Number.isFinite(n));
+    }
     if (Array.isArray(data.plots) && data.plots.length) state.plots = data.plots;
     if (Array.isArray(data.mails) && data.mails.length) state.mails = data.mails;
     if (data.buildingPos && typeof data.buildingPos === 'object') state.buildingPos = data.buildingPos;
@@ -261,12 +270,16 @@ export function resetGame() {
 
 // ---------- اقتصاد ----------
 export function addCoins(n) {
-  state.coins = Math.max(0, Math.round(state.coins + n));
+  state.coins = TEST_MODE.infiniteMoney
+    ? INFINITE_BALANCE
+    : Math.max(0, Math.round(state.coins + n));
   save();
 }
 
 export function addDew(n) {
-  state.dew = Math.max(0, Math.round(state.dew + n));
+  state.dew = TEST_MODE.infiniteMoney
+    ? INFINITE_BALANCE
+    : Math.max(0, Math.round(state.dew + n));
   save();
 }
 
@@ -284,11 +297,13 @@ export function addXp(n) {
 }
 
 export function canAfford(currency, amount) {
+  if (TEST_MODE.infiniteMoney) return true; // حالت تست: سکه و شبنم نامحدود
   return currency === 'dew' ? state.dew >= amount : state.coins >= amount;
 }
 
 export function spend(currency, amount) {
   if (!canAfford(currency, amount)) return false;
+  if (TEST_MODE.infiniteMoney) return true; // چیزی کم نمی‌شود
   if (currency === 'dew') state.dew -= amount;
   else state.coins -= amount;
   save();
@@ -374,6 +389,14 @@ export function makeWildObstacle(x, z, area = 'town') {
   const ob = makeObstacle(kind, x, z, null, 0, Math.random, area);
   ob.cost = obstacleCost(kind, 2, ob.type);
   return ob;
+}
+
+// ---------- پاک‌کردن درخت/سنگ/علف‌های جنگل (دکور) ----------
+export function markDecorRemoved(id) {
+  if (!state.removedDecor.includes(id)) {
+    state.removedDecor.push(id);
+    save();
+  }
 }
 
 // ---------- سازه‌های بازیکن (حصار/دیوار/چادر/خانه) ----------

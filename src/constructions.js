@@ -5,7 +5,7 @@
 // کلیک روی حصار/دیوار = چرخش ۹۰ درجه، دوبار کلیک سریع = برداشتن (برگشت به کارت‌ها).
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { STRUCTURES, AREAS, LAYOUT, ITEMS } from './config.js';
+import { STRUCTURES, MAP_BOUNDS, LAYOUT, ITEMS } from './config.js';
 import {
   state, addStructure, removeStructure, getStructure,
   takeItem, addItem, cellPosition, save,
@@ -30,15 +30,43 @@ export class Constructions {
   // ---------- شبکه ----------
   originOf(area) { return ORIGINS[area] || ORIGINS.town; }
 
+  // نقشه یکپارچه است: ناحیه‌ی هر نقطه از روی خودش معلوم می‌شود،
+  // پس در هرجای نقشه (شهر، مزرعه یا بینشان) می‌شود ساخت.
+  areaForPoint(point) {
+    return point && point.z >= 40 ? 'farm' : 'town';
+  }
+
   anchorFor(itemId, point, area) {
     const spec = STRUCTURES.kinds[itemId];
     if (!spec || !point) return null;
-    const o = this.originOf(area);
+    const o = this.originOf(area || this.areaForPoint(point));
     const cell = STRUCTURES.cell;
     const baseX = Math.floor((point.x - o.x) / cell);
     const baseZ = Math.floor((point.z - o.z) / cell);
     const off = Math.floor((spec.cells - 1) / 2);
     return { gx: baseX - off, gz: baseZ - off };
+  }
+
+  // خانه‌ی شبکه‌ای که نقطه داخلش است (برای درگ سازه‌ها)
+  anchorCellForPoint(point, area) {
+    if (!point) return null;
+    const o = this.originOf(area || this.areaForPoint(point));
+    const cell = STRUCTURES.cell;
+    return {
+      gx: Math.floor((point.x - o.x) / cell),
+      gz: Math.floor((point.z - o.z) / cell),
+    };
+  }
+
+  // مرکز جهانی یک سازه با جابجایی فرضی (برای پیش‌نمایش درگ)
+  centerAt(kind, area, gx, gz) {
+    const spec = STRUCTURES.kinds[kind];
+    const o = this.originOf(area);
+    const cell = STRUCTURES.cell;
+    return {
+      x: o.x + (gx + spec.cells / 2) * cell,
+      z: o.z + (gz + spec.cells / 2) * cell,
+    };
   }
 
   centerOf(st) {
@@ -58,10 +86,11 @@ export class Constructions {
     return out;
   }
 
-  occupiedCells(area, exceptId = null) {
+  occupiedCells(area, except = null) {
+    const exceptSet = except instanceof Set ? except : (except ? new Set([except]) : null);
     const set = new Set();
     for (const st of state.structures) {
-      if (st.area !== area || st.id === exceptId) continue;
+      if (st.area !== area || (exceptSet && exceptSet.has(st.id))) continue;
       for (const c of this.cellsOf(st.kind, st.gx, st.gz)) set.add(c);
     }
     return set;
@@ -77,50 +106,61 @@ export class Constructions {
   }
 
   // ---------- اعتبار جا ----------
-  check(itemId, point, area) {
-    const spec = STRUCTURES.kinds[itemId];
-    if (!spec || !point) return 'bad';
-    const anchor = this.anchorFor(itemId, point, area);
-    const bounds = AREAS[area];
-    const o = this.originOf(area);
-    const cell = STRUCTURES.cell;
-    const mine = this.cellsOf(itemId, anchor.gx, anchor.gz);
-    const occupied = this.occupiedCells(area);
-
+  // خطای جهانیِ یک خانه‌ی شبکه (مرکز cx,cz) — بدون توجه به سازه‌های دیگر
+  _cellWorldError(cx, cz) {
+    const B = MAP_BOUNDS;
+    if (cx < B.minX || cx > B.maxX || cz < B.minZ || cz > B.maxZ) return 'bounds';
     const f = LAYOUT.field;
     const fieldRect = {
       minX: f.cx - (f.cols * f.spacing) / 2 - 0.3, maxX: f.cx + (f.cols * f.spacing) / 2 + 0.3,
       minZ: f.cz - (f.rows * f.spacing) / 2 - 0.3, maxZ: f.cz + (f.rows * f.spacing) / 2 + 0.3,
     };
     const pen = LAYOUT.animalPen;
+    if (cx > fieldRect.minX && cx < fieldRect.maxX && cz > fieldRect.minZ && cz < fieldRect.maxZ) return 'field';
+    if (cx > pen.minX && cx < pen.maxX && cz > pen.minZ && cz < pen.maxZ) return 'pen';
+    if (Math.hypot(cx - LAYOUT.farmhouse.x, cz - LAYOUT.farmhouse.z) < 2.9) return 'overlap';
+    // روی جایگاه کشت نه
+    for (const p of state.plots) {
+      const pp = cellPosition(p.cell);
+      if (Math.hypot(pp.x - cx, pp.z - cz) < 1.35) return 'overlap';
+    }
+    // روی درخت/سنگ نه
+    for (const ob of state.obstacles) {
+      if (Math.hypot(ob.x - cx, ob.z - cz) < 0.95) return 'obstacle';
+    }
+    // روی ساختمان‌های شهر نه
+    for (const b of LAYOUT.buildings) {
+      const sp = this.world.getSprite('building:' + b.id);
+      if (!sp) continue;
+      if (Math.abs(sp.position.x - cx) < b.w * 0.42 && Math.abs(sp.position.z - cz) < 1.15) return 'overlap';
+    }
+    return null;
+  }
+
+  check(itemId, point, area) {
+    const spec = STRUCTURES.kinds[itemId];
+    if (!spec || !point) return 'bad';
+    const areaKey = area || this.areaForPoint(point);
+    const anchor = this.anchorFor(itemId, point, areaKey);
+    const o = this.originOf(areaKey);
+    const cell = STRUCTURES.cell;
+    const mine = this.cellsOf(itemId, anchor.gx, anchor.gz);
+    const occupied = this.occupiedCells(areaKey);
 
     for (const key of mine) {
       if (occupied.has(key)) return 'overlap';
       const [gx, gz] = key.split(',').map(Number);
       const cx = o.x + (gx + 0.5) * cell;
       const cz = o.z + (gz + 0.5) * cell;
-      if (cx < bounds.minX || cx > bounds.maxX || cz < bounds.minZ || cz > bounds.maxZ) return 'bounds';
-      if (area === 'farm') {
-        if (cx > fieldRect.minX && cx < fieldRect.maxX && cz > fieldRect.minZ && cz < fieldRect.maxZ) return 'field';
-        if (cx > pen.minX && cx < pen.maxX && cz > pen.minZ && cz < pen.maxZ) return 'pen';
-        if (Math.hypot(cx - LAYOUT.farmhouse.x, cz - LAYOUT.farmhouse.z) < 2.9) return 'overlap';
-      }
-      // روی جایگاه کشت نه
-      for (const p of state.plots) {
-        const pp = cellPosition(p.cell);
-        if (Math.hypot(pp.x - cx, pp.z - cz) < 1.35) return 'overlap';
-      }
-      // روی درخت/سنگ نه
-      for (const ob of state.obstacles) {
-        if (Math.hypot(ob.x - cx, ob.z - cz) < 0.95) return 'obstacle';
-      }
-      // روی ساختمان‌های شهر نه
-      if (area === 'town') {
-        for (const b of LAYOUT.buildings) {
-          const sp = this.world.getSprite('building:' + b.id);
-          if (!sp) continue;
-          if (Math.abs(sp.position.x - cx) < b.w * 0.42 && Math.abs(sp.position.z - cz) < 1.15) return 'overlap';
-        }
+      const err = this._cellWorldError(cx, cz);
+      if (err) return err;
+    }
+    // هم‌پوشانی با سازه‌های ناحیه‌ی دیگر (مرز شهر/مزرعه) هم ممنوع است
+    const c = this.centerAt(itemId, areaKey, anchor.gx, anchor.gz);
+    const half = (spec.cells * cell) / 2;
+    for (const r of this.occupiedRects()) {
+      if (Math.abs(r.x - c.x) < half + r.rx - 0.05 && Math.abs(r.z - c.z) < half + r.rz - 0.05) {
+        return 'overlap';
       }
     }
     return null; // مجاز
@@ -132,7 +172,8 @@ export class Constructions {
 
   // ---------- ساخت از روی کارت ----------
   placeFromCard(itemId, point, area) {
-    const err = this.check(itemId, point, area);
+    const areaKey = area || this.areaForPoint(point);
+    const err = this.check(itemId, point, areaKey);
     if (err) {
       const msgs = {
         field: 'روی زمین کشت نمی‌شود ساخت؛ دورش بساز! 🌾',
@@ -148,19 +189,19 @@ export class Constructions {
     }
     if (!takeItem(itemId)) return this.ui.needBuy(itemId);
 
-    const anchor = this.anchorFor(itemId, point, area);
+    const anchor = this.anchorFor(itemId, point, areaKey);
     // جهت حصار/دیوار: اگر همسایه‌ی افقی دارد افقی، اگر عمودی دارد عمودی
     let rot = 0;
     const spec = STRUCTURES.kinds[itemId];
     if (spec.rotatable) {
-      const occ = this.occupiedCells(area);
+      const occ = this.occupiedCells(areaKey);
       const horiz = occ.has((anchor.gx - 1) + ',' + anchor.gz) || occ.has((anchor.gx + 1) + ',' + anchor.gz);
       const vert = occ.has(anchor.gx + ',' + (anchor.gz - 1)) || occ.has(anchor.gx + ',' + (anchor.gz + 1));
       rot = vert && !horiz ? 1 : 0;
     }
     const st = addStructure({
       id: 'st_' + Math.random().toString(36).slice(2, 8),
-      kind: itemId, area, gx: anchor.gx, gz: anchor.gz, rot,
+      kind: itemId, area: areaKey, gx: anchor.gx, gz: anchor.gz, rot,
     });
     this.syncStructure(st);
     const c = this.centerOf(st);
@@ -168,8 +209,8 @@ export class Constructions {
     sfx.drop();
     const item = ITEMS[itemId];
     this.ui.toast(spec.rotatable
-      ? `${item.name} ساخته شد! 🔨 کلیک رویش = چرخش، دوبار کلیک سریع = برداشتن`
-      : `${item.name} ساخته شد! 🏠 دوبار کلیک سریع رویش = برداشتن`);
+      ? `${item.name} ساخته شد! با درگ جابجایش کن (چسبیده‌ها با هم میان)، کلیک = چرخش، دوبار کلیک سریع = برداشتن`
+      : `${item.name} ساخته شد! با درگ جابجایش کن؛ دوبار کلیک سریع رویش = برداشتن`);
     save();
     return true;
   }
@@ -211,6 +252,123 @@ export class Constructions {
     }
   }
 
+  // ---------- درگ‌اندراپ سازه‌ها (تکی و گروهی) ----------
+  // سازه‌های هم‌نوعِ چسبیده به هم یک «گروه» حساب می‌شوند؛ مثلاً سه دیوار
+  // کنار هم را می‌توانی یک‌جا بگیری و با هم جابجا کنی.
+  groupOf(st) {
+    const owner = new Map(); // cellKey -> structure (هم‌نوع و هم‌ناحیه)
+    for (const s of state.structures) {
+      if (s.area !== st.area || s.kind !== st.kind) continue;
+      for (const c of this.cellsOf(s.kind, s.gx, s.gz)) owner.set(c, s);
+    }
+    const group = [];
+    const seen = new Set([st.id]);
+    const stack = [st];
+    while (stack.length) {
+      const cur = stack.pop();
+      group.push(cur);
+      for (const key of this.cellsOf(cur.kind, cur.gx, cur.gz)) {
+        const [gx, gz] = key.split(',').map(Number);
+        const neighbors = [
+          (gx - 1) + ',' + gz, (gx + 1) + ',' + gz,
+          gx + ',' + (gz - 1), gx + ',' + (gz + 1),
+        ];
+        for (const nk of neighbors) {
+          const other = owner.get(nk);
+          if (other && !seen.has(other.id)) {
+            seen.add(other.id);
+            stack.push(other);
+          }
+        }
+      }
+    }
+    return group;
+  }
+
+  groupBounds(group, dGx = 0, dGz = 0) {
+    let minGx = Infinity, maxGx = -Infinity, minGz = Infinity, maxGz = -Infinity;
+    for (const st of group) {
+      const n = STRUCTURES.kinds[st.kind].cells;
+      minGx = Math.min(minGx, st.gx + dGx);
+      maxGx = Math.max(maxGx, st.gx + dGx + n - 1);
+      minGz = Math.min(minGz, st.gz + dGz);
+      maxGz = Math.max(maxGz, st.gz + dGz + n - 1);
+    }
+    const o = this.originOf(group[0].area);
+    const cell = STRUCTURES.cell;
+    const w = (maxGx - minGx + 1) * cell;
+    const d = (maxGz - minGz + 1) * cell;
+    return {
+      x: o.x + (minGx + (maxGx - minGx + 1) / 2) * cell,
+      z: o.z + (minGz + (maxGz - minGz + 1) / 2) * cell,
+      w, d,
+    };
+  }
+
+  canMoveGroup(group, dGx, dGz) {
+    if (!group || !group.length) return false;
+    if (dGx === 0 && dGz === 0) return true;
+    const area = group[0].area;
+    const except = new Set(group.map(s => s.id));
+    const occupied = this.occupiedCells(area, except);
+    const o = this.originOf(area);
+    const cell = STRUCTURES.cell;
+    for (const st of group) {
+      for (const key of this.cellsOf(st.kind, st.gx + dGx, st.gz + dGz)) {
+        if (occupied.has(key)) return false;
+        const [gx, gz] = key.split(',').map(Number);
+        const cx = o.x + (gx + 0.5) * cell;
+        const cz = o.z + (gz + 0.5) * cell;
+        if (this._cellWorldError(cx, cz)) return false;
+      }
+    }
+    return true;
+  }
+
+  _setVisualPos(st, c) {
+    const sp = this.world.getSprite('structure:' + st.id);
+    if (sp) {
+      sp.position.x = c.x;
+      sp.position.z = c.z;
+      sp.renderOrder = 1000 + c.z * 10;
+      if (sp.userData.shadow) sp.userData.shadow.position.set(c.x, 0.03, c.z + 0.25);
+    }
+    const v = this.visuals.get(st.id);
+    if (v && v.group) {
+      v.group.position.set(c.x, 0, c.z);
+      v.group.traverse((obj) => { if (obj.isMesh) obj.renderOrder = 1000 + c.z * 10 + 1; });
+    }
+  }
+
+  _reposVisual(st) {
+    this._setVisualPos(st, this.centerOf(st));
+  }
+
+  // پیش‌نمایش هنگام درگ: فقط ظاهر جابجا می‌شود، داده دست نمی‌خورد
+  previewGroup(group, dGx, dGz) {
+    for (const st of group) {
+      this._setVisualPos(st, this.centerAt(st.kind, st.area, st.gx + dGx, st.gz + dGz));
+    }
+  }
+
+  restoreGroup(group) {
+    for (const st of group) this._reposVisual(st);
+  }
+
+  moveGroup(group, dGx, dGz) {
+    if (!this.canMoveGroup(group, dGx, dGz)) {
+      this.restoreGroup(group);
+      return false;
+    }
+    for (const st of group) {
+      st.gx += dGx;
+      st.gz += dGz;
+    }
+    this.restoreGroup(group);
+    save();
+    return true;
+  }
+
   // ---------- نمایش ----------
   spawnAll() {
     for (const st of state.structures) this.syncStructure(st);
@@ -218,7 +376,7 @@ export class Constructions {
 
   syncStructure(st) {
     const tag = 'structure:' + st.id;
-    if (this.world.getSprite(tag)) return;
+    if (this.world.getSprite(tag)) { this._reposVisual(st); return; }
     const c = this.centerOf(st);
     const w = Math.max(1.1, STRUCTURES.kinds[st.kind].cells * STRUCTURES.cell);
     const sp = this.world.addSprite({

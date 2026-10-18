@@ -11,6 +11,7 @@ global.performance = { now: () => Date.now() };
 const THREE = await import('three');
 const { Constructions } = await import('../src/constructions.js');
 const { Animals } = await import('../src/animals.js');
+const { Characters } = await import('../src/characters.js');
 const { state } = await import('../src/state.js');
 const { STRUCTURES, LAYOUT } = await import('../src/config.js');
 
@@ -84,6 +85,47 @@ check('شبکه‌ی شهر و مزرعه جدا حساب می‌شود',
 await cons.init();
 check('بعد از init برای همه‌ی سازه‌ها مدل نمایشی ساخته شد',
   state.structures.every(s => cons.visuals.get(s.id) && cons.visuals.get(s.id).group));
+
+
+// --- درگ گروهی: سه دیوار چسبیده با هم جابجا می‌شوند ---
+state.inventory.wall = 5;
+check('دیوار اول از ردیف ساخته شد', cons.placeFromCard('wall', { x: -4, z: 10 }, 'town') === true);
+check('دیوار دوم ساخته شد', cons.placeFromCard('wall', { x: -4 + cell, z: 10 }, 'town') === true);
+check('دیوار سوم ساخته شد', cons.placeFromCard('wall', { x: -4 + cell * 2, z: 10 }, 'town') === true);
+const wallRow = state.structures.filter(s => s.kind === 'wall' && s.area === 'town');
+const grp = cons.groupOf(wallRow[0]);
+check('سه دیوار چسبیده یک گروه‌اند', grp.length === 3);
+check('جابجایی گروه به جای آزاد مجاز است', cons.canMoveGroup(grp, 0, 2) === true);
+const gzBefore = grp.map(s => s.gz);
+check('گروه با هم جابجا شد', cons.moveGroup(grp, 0, 2) === true &&
+  grp.every((s, i) => s.gz === gzBefore[i] + 2));
+check('جابجایی گروه روی خودش/جای اشغال رد می‌شود',
+  cons.canMoveGroup(grp, 0, -2) === true); // برگشت به جای خالیِ قبلی آزاد است
+{
+  // ساخت در وسط نقشه (بین شهر و مزرعه) بدون گفتن ناحیه هم باید کار کند
+  state.inventory.fence = 5;
+  const nBefore = state.structures.length;
+  const okMid1 = cons.placeFromCard('fence', { x: 0, z: 35 });
+  const okMid2 = cons.placeFromCard('fence', { x: 0, z: 45 });
+  const added = state.structures.slice(nBefore);
+  check('بین شهر و مزرعه هم می‌شود ساخت', okMid1 === true && okMid2 === true && added.length === 2);
+  check('ناحیه از روی موقعیت تشخیص داده می‌شود',
+    added[0].area === 'town' && added[1].area === 'farm');
+}
+
+// --- ناوبری آدمک‌ها: مسیر دور خانه می‌گردد، از وسطش رد نمی‌شود ---
+const chars = new Characters(fakeWorld, fakeUi);
+const houseC = cons.centerOf(house);
+check('وسط خانه برای آدمک بسته است', chars.isFree(houseC.x, houseC.z) === false);
+check('زمین خالی برای آدمک باز است', chars.isFree(houseC.x - 4.5, houseC.z) === true);
+const path = chars._findPath(
+  { x: houseC.x - 4.5, z: houseC.z },
+  { x: houseC.x + 4.5, z: houseC.z });
+check('مسیر از یک طرف خانه به طرف دیگر پیدا شد', Array.isArray(path) && path.length >= 2);
+check('مسیر از وسط خانه رد نمی‌شود', !!path && path.every(pt =>
+  Math.abs(pt.x - houseC.x) > 1.0 || Math.abs(pt.z - houseC.z) > 1.0));
+check('مسیر به مقصد می‌رسد', !!path &&
+  Math.hypot(path[path.length - 1].x - (houseC.x + 4.5), path[path.length - 1].z - houseC.z) < 0.6);
 
 // --- حیوانات: ساخت و آپدیت بدون کرش، داخل آغل ---
 const animals = new Animals(fakeWorld);

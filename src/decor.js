@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OBSTACLES, STRUCTURES, LAYOUT, FARM_CENTER } from './config.js';
+import { state, markDecorRemoved } from './state.js';
 
 function mulberry32(seed) {
   let a = seed >>> 0;
@@ -44,6 +45,9 @@ export class Decor {
     this.group = new THREE.Group();
     this.world.scene.add(this.group);
     this.ready = false;
+    // درخت/سنگ/علف‌های جنگل که با کلیک پاک می‌شوند
+    this.deletableMeshes = [];       // InstancedMeshهایی که userData.records دارند
+    this.recordsById = new Map();    // decorId -> { id, x, z, type, mesh, index, removed }
   }
 
   _load(path, file) {
@@ -116,26 +120,29 @@ export class Decor {
   }
 
   // ---------- جنگل انبوه ----------
+  // کل نقشه بیرونِ محوطه‌ی شهر و مزرعه جنگل است — حتی وقتی کامل زوم‌اوت
+  // می‌کنی یا نقشه را می‌کشی، بغل‌ها خالی نمی‌مانند. هر درخت یک آیدی ثابت
+  // دارد تا پاک‌کردنش با کلیک ذخیره شود و دفعه‌ی بعد همان‌طور بماند.
   _forestPositions(rng) {
     const pts = [];
-    const belt = (cx, cz, halfW, halfH, thick, spacing, keep) => {
-      for (let x = cx - halfW; x <= cx + halfW; x += spacing) {
-        for (let z = cz - halfH; z <= cz + halfH; z += spacing) {
-          const inside = Math.abs(x - cx) < halfW - thick && Math.abs(z - cz) < halfH - thick;
-          if (inside) continue;
-          if (rng() > keep) continue;
-          pts.push({ x: x + (rng() - 0.5) * 0.7, z: z + (rng() - 0.5) * 0.7 });
-        }
-      }
-    };
-    // حلقه‌ی جنگلی دور شهر و دور مزرعه — درخت‌ها کاملاً کنار هم
-    belt(0, 2, 19.5, 15.5, 3.4, 1.32, 0.94);
-    belt(FARM_CENTER.x, FARM_CENTER.z, 19.5, 15.5, 3.4, 1.32, 0.94);
-    // فضای بین دو صحنه هم جنگل است
-    for (let x = -19; x <= 19; x += 1.85) {
-      for (let z = 19; z <= 57; z += 1.85) {
-        if (rng() > 0.78) continue;
-        pts.push({ x: x + (rng() - 0.5) * 0.9, z: z + (rng() - 0.5) * 0.9 });
+    let id = 0;
+    // محوطه‌های بازِ بازی (شهر و مزرعه) — داخل این‌ها جنگل تزیینی نمی‌کاریم
+    const clears = [
+      { minX: -17.6, maxX: 17.6, minZ: -8.6, maxZ: 17.2 },
+      { minX: -17.6, maxX: 17.6, minZ: 57.4, maxZ: 92.6 },
+    ];
+    const inClear = (x, z) => clears.some(r => x > r.minX && x < r.maxX && z > r.minZ && z < r.maxZ);
+    for (let x = -45; x <= 45; x += 1.55) {
+      for (let z = -35; z <= 120; z += 1.55) {
+        if (inClear(x, z)) continue;
+        // نزدیک محوطه‌های بازی انبوه‌تر، دورترها کمی خلوت‌تر (برای کارایی)
+        const far = Math.abs(x) > 27 || z < -17 || z > 101;
+        if (rng() > (far ? 0.68 : 0.93)) continue;
+        pts.push({
+          id: id++,
+          x: x + (rng() - 0.5) * 0.8,
+          z: z + (rng() - 0.5) * 0.8,
+        });
       }
     }
     return pts;
@@ -169,7 +176,8 @@ export class Decor {
     ].filter(k => k.geo);
 
     // توزیع نقطه‌ها بین قالب‌ها و نوارهای عمق
-    const buckets = new Map(); // `${band}|${kindKey}` -> {kind, mats:[]}
+    const removedSet = new Set(state.removedDecor || []);
+    const buckets = new Map(); // `${band}|${kindKey}` -> {kind, mats:[], recs:[]}
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const e = new THREE.Euler();
@@ -189,36 +197,51 @@ export class Decor {
       // مرکز مدل روی نقطه بنشیند: آفست مرکز محلی را هم اعمال کن
       const off = new THREE.Matrix4().makeTranslation(-kind.cx, 0, -kind.cz);
       m.compose(v, q, sc).multiply(off).multiply(kind.local);
-      const band = Math.floor(p.z / 2.5);
+      // درختی که بازیکن قبلاً پاک کرده دیگر ساخته نمی‌شود
+      if (removedSet.has(p.id)) continue;
+      const band = Math.floor(p.z / 4);
       const key = band + '|' + kind.key;
-      if (!buckets.has(key)) buckets.set(key, { kind, band, mats: [] });
-      buckets.get(key).mats.push(m.clone());
+      if (!buckets.has(key)) buckets.set(key, { kind, band, mats: [], recs: [] });
+      const bucket = buckets.get(key);
+      bucket.mats.push(m.clone());
+      bucket.recs.push({ id: p.id, x: p.x, z: p.z, type: isRock ? 'rock' : 'tree' });
     }
 
-    for (const { kind, band, mats } of buckets.values()) {
+    for (const { kind, band, mats, recs } of buckets.values()) {
       const im = new THREE.InstancedMesh(kind.geo, kind.mat, mats.length);
       mats.forEach((mtx, i) => im.setMatrixAt(i, mtx));
       im.instanceMatrix.needsUpdate = true;
       im.frustumCulled = false;
-      im.renderOrder = 1000 + (band * 2.5) * 10 + 1;
+      im.renderOrder = 1000 + (band * 4) * 10 + 1;
+      im.userData.records = recs;
+      im.userData.bandZ = band * 4;
       this.group.add(im);
+      this.deletableMeshes.push(im);
+      recs.forEach((rec, i) => {
+        rec.mesh = im; rec.index = i; rec.removed = false;
+        this.recordsById.set(rec.id, rec);
+      });
     }
   }
 
   _buildGrass(grassTpls) {
     const rng = mulberry32(13579);
+    const removedSet = new Set(state.removedDecor || []);
     const f = LAYOUT.field;
     const fieldRect = {
       minX: f.cx - (f.cols * f.spacing) / 2 - 0.6, maxX: f.cx + (f.cols * f.spacing) / 2 + 0.6,
       minZ: f.cz - (f.rows * f.spacing) / 2 - 0.6, maxZ: f.cz + (f.rows * f.spacing) / 2 + 0.6,
     };
     const pts = [];
-    for (let i = 0; i < 260; i++) {
-      const inFarm = rng() < 0.55;
-      const x = -16 + rng() * 32;
-      const z = inFarm ? 60 + rng() * 30 : -7 + rng() * 23;
+    for (let i = 0; i < 520; i++) {
+      const r = rng();
+      const x = -19 + rng() * 38;
+      // شهر، مزرعه و کمی هم جنگلِ بینشان علف دارند
+      const z = r < 0.42 ? -7 + rng() * 23 : r < 0.85 ? 60 + rng() * 30 : 18 + rng() * 38;
+      // آیدی از روی شماره‌ی کاندید ثابت می‌ماند (حتی اگر این یکی رد شود)
+      const id = 200000 + i;
       if (x > fieldRect.minX && x < fieldRect.maxX && z > fieldRect.minZ && z < fieldRect.maxZ) continue;
-      pts.push({ x, z });
+      pts.push({ id, x, z });
     }
     const tpl = grassTpls[0];
     const mesh = this._firstMesh(tpl);
@@ -236,18 +259,61 @@ export class Decor {
       e.set(0, rng() * Math.PI * 2, 0);
       q.setFromEuler(e);
       m.compose(new THREE.Vector3(p.x, -box.min.y * s, p.z), q, new THREE.Vector3(s, s, s)).multiply(mesh.matrixWorld);
-      const band = Math.floor(p.z / 2.5);
-      if (!buckets.has(band)) buckets.set(band, []);
-      buckets.get(band).push(m.clone());
+      if (removedSet.has(p.id)) continue;
+      const band = Math.floor(p.z / 4);
+      if (!buckets.has(band)) buckets.set(band, { mats: [], recs: [] });
+      const bucket = buckets.get(band);
+      bucket.mats.push(m.clone());
+      bucket.recs.push({ id: p.id, x: p.x, z: p.z, type: 'grass' });
     }
-    for (const [band, mats] of buckets) {
+    for (const [band, { mats, recs }] of buckets) {
       const im = new THREE.InstancedMesh(mesh.geometry, mesh.material, mats.length);
       mats.forEach((mtx, i) => im.setMatrixAt(i, mtx));
       im.instanceMatrix.needsUpdate = true;
       im.frustumCulled = false;
-      im.renderOrder = 1000 + (band * 2.5) * 10;
+      im.renderOrder = 1000 + (band * 4) * 10;
+      im.userData.records = recs;
+      im.userData.bandZ = band * 4;
       this.group.add(im);
+      this.deletableMeshes.push(im);
+      recs.forEach((rec, i) => {
+        rec.mesh = im; rec.index = i; rec.removed = false;
+        this.recordsById.set(rec.id, rec);
+      });
     }
+  }
+
+  // ---------- پاک‌کردن درخت/سنگ/علف جنگل با کلیک ----------
+  // روی هر درخت، سنگ یا علفِ جنگل کلیک کنی پاک می‌شود و پاک‌شدنش ذخیره
+  // می‌شود — این‌طوری می‌توانی کم‌کم بین شهر و مزرعه راه باز کنی.
+  tryRemoveAt(clientX, clientY, groundPoint) {
+    if (!this.deletableMeshes.length) return null;
+    let rec = null;
+    // فقط نوارهای عمق نزدیک نقطه‌ی کلیک را ری‌کست کن (سریع و سبک)
+    const gz = groundPoint ? groundPoint.z : 0;
+    const near = this.deletableMeshes.filter(im =>
+      groundPoint ? (im.userData.bandZ > gz - 10 && im.userData.bandZ < gz + 6) : true);
+    const hit = this.world.pickInstanced(near, clientX, clientY);
+    if (hit && hit.object.userData.records && hit.instanceId !== undefined) {
+      rec = hit.object.userData.records[hit.instanceId] || null;
+    }
+    // اگر ری‌کست نگرفت (علف ریز است)، نزدیک‌ترین مورد به نقطه‌ی زمین را بردار
+    if (!rec && groundPoint) {
+      let bestD = Infinity;
+      for (const r of this.recordsById.values()) {
+        if (r.removed) continue;
+        const d = (r.x - groundPoint.x) ** 2 + (r.z - groundPoint.z) ** 2;
+        const limit = r.type === 'grass' ? 0.8 : 1.25;
+        if (d < limit * limit && d < bestD) { bestD = d; rec = r; }
+      }
+    }
+    if (!rec || rec.removed) return null;
+    rec.removed = true;
+    const zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    rec.mesh.setMatrixAt(rec.index, zero);
+    rec.mesh.instanceMatrix.needsUpdate = true;
+    markDecorRemoved(rec.id);
+    return rec;
   }
 
   // ---------- حصار دور آغل حیوانات ----------

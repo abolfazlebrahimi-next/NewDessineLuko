@@ -1,9 +1,21 @@
 // ================= رابط کاربری: HUD، فروشگاه کلش‌مانند، کارت‌ها =================
-import { state, addCoins, addDew, addXp, resetGame, save, buildingReady, setBuildingCooldown, cooldownLeft } from './state.js';
-import { LAYOUT, ASSET, ITEMS, TRAY_ORDER, CATEGORIES, CROPS, PRICES, BUY_STEPS, xpForLevel, isGroundItem } from './config.js';
+import { state, addCoins, addDew, addXp, resetGame, save, buildingReady, setBuildingCooldown, cooldownLeft, spend, canAfford } from './state.js';
+import { LAYOUT, ASSET, ITEMS, TRAY_ORDER, CATEGORIES, CROPS, PRICES, BUY_STEPS, xpForLevel, isGroundItem, TEST_MODE, ITEM_SELL_RATIO } from './config.js';
 import { sfx } from './audio.js';
 
 const fmt = (n) => Math.round(n).toLocaleString('fa-IR');
+// در حالت تست، موجودی بی‌نهایت نمایش داده می‌شود
+const fmtMoney = (currency) => TEST_MODE.infiniteMoney
+  ? '∞'
+  : fmt(currency === 'dew' ? state.dew : state.coins);
+
+// آیکون‌های برداری (SVG) سازه‌ها — بدون استیکر/ایموجی
+const ITEM_SVG = {
+  fence: `<svg class="item-svg" viewBox="0 0 48 48"><g fill="#a06a35"><rect x="6" y="10" width="5" height="30" rx="1.5"/><rect x="21.5" y="10" width="5" height="30" rx="1.5"/><rect x="37" y="10" width="5" height="30" rx="1.5"/></g><g fill="#c08347"><rect x="3" y="16.5" width="42" height="4.6" rx="2"/><rect x="3" y="28.5" width="42" height="4.6" rx="2"/></g></svg>`,
+  wall: `<svg class="item-svg" viewBox="0 0 48 48"><g fill="#b3573e" stroke="#7e3524" stroke-width="1.6"><rect x="4" y="9" width="19" height="9" rx="1.5"/><rect x="25" y="9" width="19" height="9" rx="1.5"/><rect x="4" y="30" width="19" height="9" rx="1.5"/><rect x="25" y="30" width="19" height="9" rx="1.5"/></g><rect x="14.5" y="19.5" width="19" height="9" rx="1.5" fill="#c9664d" stroke="#7e3524" stroke-width="1.6"/><rect x="4" y="19.5" width="8.5" height="9" rx="1.5" fill="#c9664d" stroke="#7e3524" stroke-width="1.6"/><rect x="35.5" y="19.5" width="8.5" height="9" rx="1.5" fill="#c9664d" stroke="#7e3524" stroke-width="1.6"/></svg>`,
+  tent: `<svg class="item-svg" viewBox="0 0 48 48"><polygon points="24,7 44,40 4,40" fill="#e0ac4e"/><polygon points="24,7 44,40 24,40" fill="#c98f2b"/><polygon points="24,22 31,40 17,40" fill="#6e4517"/><line x1="24" y1="7" x2="24" y2="3.5" stroke="#6e4517" stroke-width="2.4"/></svg>`,
+  house: `<svg class="item-svg" viewBox="0 0 48 48"><rect x="11" y="22" width="26" height="19" fill="#dbb98a" stroke="#8a5a2b" stroke-width="2"/><polygon points="24,6 43,23 5,23" fill="#a8542f"/><rect x="20.5" y="30" width="7" height="11" fill="#6e4517"/><rect x="14" y="27" width="5" height="5" fill="#aee1ff"/><rect x="29" y="27" width="5" height="5" fill="#aee1ff"/></svg>`,
+};
 
 // آیکون‌های SVG برای دکمه‌های HUD
 const SVG = {
@@ -58,7 +70,7 @@ export class UI {
     side.id = 'hud-side';
     side.innerHTML = `
       <button class="side-btn area-btn" id="btn-area">
-        <span class="side-ico">🌾</span><span id="btn-area-label">رفتن به مزرعه</span>
+        <span class="side-ico"><img src="${ASSET('Farm.png')}" alt="" draggable="false"></span><span id="btn-area-label">رفتن به مزرعه</span>
       </button>
       <button class="side-btn" id="btn-mail">
         <span class="side-ico">${SVG.mail}</span><span>پیام‌ها</span>
@@ -84,10 +96,10 @@ export class UI {
     if (!label || !btn) return;
     if (areaKey === 'farm') {
       label.textContent = 'برگشت به شهر';
-      btn.querySelector('.side-ico').textContent = '🏘️';
+      btn.querySelector('.side-ico').innerHTML = `<img src="${ASSET('AmusementPark.png')}" alt="" draggable="false">`;
     } else {
       label.textContent = 'رفتن به مزرعه';
-      btn.querySelector('.side-ico').textContent = '🌾';
+      btn.querySelector('.side-ico').innerHTML = `<img src="${ASSET('Farm.png')}" alt="" draggable="false">`;
     }
   }
 
@@ -108,7 +120,7 @@ export class UI {
         const delay = (Math.random() * 0.28).toFixed(2);
         puffs += `<span class="cloud-puff" style="width:${size}px;height:${size * 0.62}px;top:${top}%;animation-delay:${delay}s"></span>`;
       }
-      ov.innerHTML = `<div class="cloud-sheet"></div>${puffs}<div class="cloud-text">در راه… ☁️</div>`;
+      ov.innerHTML = `<div class="cloud-sheet"></div>${puffs}<div class="cloud-text">در راه…</div>`;
       document.getElementById('game').appendChild(ov);
     }
     void ov.offsetWidth;
@@ -140,8 +152,8 @@ export class UI {
       const need = xpForLevel(state.level);
       document.getElementById('xp-fill').style.width = Math.min(100, (state.xp / need) * 100) + '%';
       document.getElementById('xp-text').textContent = `${fmt(state.xp)} / ${fmt(need)} XP`;
-      document.getElementById('coins-val').textContent = fmt(state.coins);
-      document.getElementById('dew-val').textContent = fmt(state.dew);
+      document.getElementById('coins-val').textContent = fmtMoney('coins');
+      document.getElementById('dew-val').textContent = fmtMoney('dew');
       const unclaimed = state.mails.filter(m => !m.claimed).length;
       const badge = document.getElementById('mail-badge');
       badge.textContent = fmt(unclaimed);
@@ -298,13 +310,22 @@ export class UI {
     return false;
   }
 
-  // آیکون آیتم: تصویر یا ایموجی بزرگ (برای سازه‌های پکیج دوم)
+  // آیکون آیتم: تصویر واقعی یا آیکون برداری — بدون استیکر/ایموجی
   itemIconHtml(item) {
     if (item.icon) return `<img src="${ASSET(item.icon)}" alt="${item.name}" draggable="false">`;
-    return `<span class="emoji-icon">${item.emoji || '❓'}</span>`;
+    return ITEM_SVG[item.svg || item.id] || ITEM_SVG.house;
+  }
+
+  // آیکون دسته‌های فروشگاه: تصویر یکی از محصولات همان دسته
+  catIconHtml(catId) {
+    const files = { plots: 'Product1.png', care: 'Water.png', seeds: 'Wheatgrain.png' };
+    if (catId === 'build') return ITEM_SVG.house;
+    return `<img src="${ASSET(files[catId] || 'coin.png')}" alt="" draggable="false">`;
   }
 
   // ================= سینی کارت‌ها =================
+  // فقط آیتم‌هایی که خریده‌ای و موجود داری اینجا می‌آیند؛
+  // همه‌ی محصولات و چیزهای خریدنی داخل فروشگاه (دسته‌بندی‌شده) هستند.
   buildTray() {
     const tray = document.createElement('div');
     tray.id = 'tray';
@@ -314,53 +335,54 @@ export class UI {
       <button class="tray-arrow" id="tray-next" aria-label="بعدی">▶</button>`;
     document.getElementById('overlay').appendChild(tray);
 
-    const scroll = tray.querySelector('#tray-scroll');
-    for (const id of TRAY_ORDER) {
-      const item = ITEMS[id];
-      const card = document.createElement('div');
-      card.className = 'card';
-      card.dataset.item = id;
-      card.innerHTML = `
-        <div class="card-title">${item.name}</div>
-        <div class="card-count" data-count="${id}">۰</div>
-        <div class="card-img">${this.itemIconHtml(item)}</div>
-        <div class="card-buy">
-          <span class="price"><img src="${ASSET(item.currency === 'dew' ? 'Dew.png' : 'coin.png')}" alt=""> ${fmt(item.price)}</span>
-          <button class="buy-btn">خرید</button>
-        </div>`;
-      scroll.appendChild(card);
-
-      card.querySelector('.buy-btn').addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.safe(() => {
-          if (this.buyItem(id)) {
-            this.refreshTray();
-            this.refreshHud();
-          }
-        });
-      });
-
-      card.addEventListener('pointerdown', (e) => this.safe(() => this.onCardPointerDown(e, id)));
-    }
+    this.trayScroll = tray.querySelector('#tray-scroll');
+    this._traySignature = null;
 
     tray.querySelector('#tray-prev').addEventListener('click', () => {
-      scroll.scrollBy({ left: 320, behavior: 'smooth' });
+      this.trayScroll.scrollBy({ left: 320, behavior: 'smooth' });
     });
     tray.querySelector('#tray-next').addEventListener('click', () => {
-      scroll.scrollBy({ left: -320, behavior: 'smooth' });
+      this.trayScroll.scrollBy({ left: -320, behavior: 'smooth' });
     });
 
     this.refreshTray();
   }
 
   refreshTray() {
-    for (const id of TRAY_ORDER) {
-      const el = document.querySelector(`[data-count="${id}"]`);
-      if (el) {
-        const n = state.inventory[id] || 0;
-        el.textContent = fmt(n);
-        el.classList.toggle('empty', n === 0);
+    const scroll = this.trayScroll || document.getElementById('tray-scroll');
+    if (!scroll) return;
+    const owned = TRAY_ORDER.filter(id => (state.inventory[id] || 0) > 0);
+    const signature = owned.join('|');
+    if (signature === this._traySignature) {
+      // فقط شمارنده‌ها عوض شده‌اند
+      for (const id of owned) {
+        const el = scroll.querySelector(`[data-count="${id}"]`);
+        if (el) el.textContent = fmt(state.inventory[id] || 0);
       }
+      return;
+    }
+    this._traySignature = signature;
+    scroll.innerHTML = '';
+    if (!owned.length) {
+      const empty = document.createElement('button');
+      empty.className = 'tray-empty';
+      empty.textContent = 'کارتی نداری — برای خرید، فروشگاه را باز کن';
+      empty.addEventListener('click', () => this.safe(() => this.openShop()));
+      scroll.appendChild(empty);
+      return;
+    }
+    for (const id of owned) {
+      const item = ITEMS[id];
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.dataset.item = id;
+      card.innerHTML = `
+        <div class="card-title">${item.name}</div>
+        <div class="card-count" data-count="${id}">${fmt(state.inventory[id] || 0)}</div>
+        <div class="card-img">${this.itemIconHtml(item)}</div>
+        <div class="card-hint">بکش و بینداز</div>`;
+      card.addEventListener('pointerdown', (e) => this.safe(() => this.onCardPointerDown(e, id)));
+      scroll.appendChild(card);
     }
   }
 
@@ -376,29 +398,48 @@ export class UI {
   buyItem(id, qty = 1, silent = false) {
     const item = ITEMS[id];
     const total = item.price * qty;
-    const wallet = item.currency === 'dew' ? state.dew : state.coins;
-    if (wallet < total) {
+    if (!canAfford(item.currency, total)) {
       if (!silent) this.toast(item.currency === 'dew' ? 'شبنم کافی نیست!' : 'سکه کافی نیست!');
       sfx.error();
       return false;
     }
-    if (item.currency === 'dew') state.dew -= total;
-    else state.coins -= total;
+    spend(item.currency, total);
     state.inventory[id] = (state.inventory[id] || 0) + qty;
     save();
     sfx.buy();
+    this.refreshTray();       // کارت تازه در سینی پایین ظاهر می‌شود
     this.pulseCard(id);
     if (!silent) {
-      this.toast(`«${item.name}» ×${fmt(qty)} خریداری شد و به کارت‌های پایین اضافه شد! ✅`);
+      this.toast(`«${item.name}» ×${fmt(qty)} خریداری شد و به کارت‌های پایین اضافه شد!`);
       this.bumpCurrencies();
-      this.refreshTray();
     }
+    return true;
+  }
+
+  // فروش آیتم‌های خریده‌شده از موجودی (در فروشگاه)
+  sellItem(id, qty = 1) {
+    const item = ITEMS[id];
+    const have = state.inventory[id] || 0;
+    const n = Math.min(qty, have);
+    if (n <= 0) {
+      this.toast(`از «${item.name}» چیزی نداری که بفروشی.`);
+      sfx.error();
+      return false;
+    }
+    const gain = Math.max(1, Math.floor(item.price * ITEM_SELL_RATIO)) * n;
+    state.inventory[id] = have - n;
+    if (item.currency === 'dew') addDew(gain);
+    else addCoins(gain);
+    save();
+    sfx.coin();
+    this.refreshTray();       // اگر تمام شد، کارت از پایین حذف می‌شود
+    this.bumpCurrencies();
+    this.toast(`«${item.name}» ×${fmt(n)} فروخته شد → +${fmt(gain)} ${item.currency === 'dew' ? 'شبنم' : 'سکه'}`);
     return true;
   }
 
   // ---------- درگ‌اندراپ کارت‌ها ----------
   onCardPointerDown(e, itemId) {
-    if (e.target.closest('.buy-btn')) return;
     e.preventDefault();
     const ghost = document.getElementById('drag-ghost');
     const item = ITEMS[itemId];
@@ -435,7 +476,7 @@ export class UI {
       this.dragItem = null;
 
       if (!this.dragMoved) {
-        this.toast(`«${item.name}» — ${item.desc} (بخر و روی زمین بینداز)`);
+        this.toast(`«${item.name}» — ${item.desc}`);
         return;
       }
       if (!target) {
@@ -449,12 +490,8 @@ export class UI {
         return;
       }
       if ((state.inventory[itemId] || 0) <= 0) {
-        if (!this.buyItem(itemId, 1, true)) {
-          this.needBuy(itemId);
-          return;
-        }
-        this.refreshTray();
-        this.bumpCurrencies();
+        this.needBuy(itemId);
+        return;
       }
       this.onDropItem(itemId, target);
     };
@@ -525,12 +562,15 @@ export class UI {
   renderShop(panel, category) {
     const cats = CATEGORIES.map((c, i) => `
       <button class="shop-cat ${c.id === category ? 'active' : ''}" data-cat="${c.id}">
-        <span class="shop-cat-ico">${{ plots: '🏗️', care: '💧', seeds: '🌱', build: '🧱' }[c.id] || '🛒'}</span>
+        <span class="shop-cat-ico">${this.catIconHtml(c.id)}</span>
         <span>${c.name}</span>
       </button>
     `).join('');
 
-    const items = Object.values(ITEMS).filter(i => i.category === category).map(i => `
+    const items = Object.values(ITEMS).filter(i => i.category === category).map(i => {
+      const sellOne = Math.max(1, Math.floor(i.price * ITEM_SELL_RATIO));
+      const curImg = ASSET(i.currency === 'dew' ? 'Dew.png' : 'coin.png');
+      return `
       <div class="shop-item" data-shop-item="${i.id}">
         <div class="shop-item-rarity"></div>
         <div class="shop-item-img">${this.itemIconHtml(i)}</div>
@@ -542,22 +582,27 @@ export class UI {
             <button class="qty-btn ${qi === 0 ? 'active' : ''}" data-qty="${q}" data-for="${i.id}">×${fmt(q)}</button>
           `).join('')}
         </div>
-        <button class="shop-buy" data-buy="${i.id}">
-          <img src="${ASSET(i.currency === 'dew' ? 'Dew.png' : 'coin.png')}" alt="">
-          <span data-total="${i.id}">${fmt(i.price)}</span>
-        </button>
-      </div>
-    `).join('');
+        <div class="shop-actions">
+          <button class="shop-buy" data-buy="${i.id}">
+            خرید <img src="${curImg}" alt=""> <span data-total="${i.id}">${fmt(i.price)}</span>
+          </button>
+          <button class="shop-sell" data-sell="${i.id}" ${(state.inventory[i.id] || 0) > 0 ? '' : 'disabled'}>
+            فروش <img src="${curImg}" alt=""> <span data-selltotal="${i.id}">${fmt(sellOne)}</span>
+          </button>
+        </div>
+      </div>`;
+    }).join('');
 
     panel.innerHTML = `
       <div class="shop-header">
-        <h2>🏪 فروشگاه لوکو</h2>
+        <h2>فروشگاه لوکو</h2>
         <div class="shop-wallet">
-          <span class="w-coin"><img src="${ASSET('coin.png')}" alt=""> ${fmt(state.coins)}</span>
-          <span class="w-dew"><img src="${ASSET('Dew.png')}" alt=""> ${fmt(state.dew)}</span>
+          <span class="w-coin"><img src="${ASSET('coin.png')}" alt=""> ${fmtMoney('coins')}</span>
+          <span class="w-dew"><img src="${ASSET('Dew.png')}" alt=""> ${fmtMoney('dew')}</span>
         </div>
         <button class="modal-close">✕</button>
       </div>
+      <div class="shop-hint">هرچه بخری به کارت‌های پایین صفحه اضافه می‌شود و هرچه داری را از همین‌جا می‌توانی بفروشی.</div>
       <div class="shop-body">
         <div class="shop-cats">${cats}</div>
         <div class="shop-grid">${items}</div>
@@ -577,24 +622,46 @@ export class UI {
         const item = ITEMS[id];
         const totalEl = panel.querySelector(`[data-total="${id}"]`);
         if (totalEl) totalEl.textContent = fmt(item.price * +btn.dataset.qty);
+        const sellEl = panel.querySelector(`[data-selltotal="${id}"]`);
+        if (sellEl) sellEl.textContent = fmt(Math.max(1, Math.floor(item.price * ITEM_SELL_RATIO)) * +btn.dataset.qty);
       }));
     });
+
+    // به‌روزرسانی ظاهری ردیف یک آیتم بعد از خرید/فروش
+    const syncRow = (id) => {
+      const have = panel.querySelector(`[data-shop-item="${id}"] .shop-item-have b`);
+      if (have) have.textContent = fmt(state.inventory[id] || 0);
+      const sellBtn = panel.querySelector(`[data-sell="${id}"]`);
+      if (sellBtn) sellBtn.disabled = (state.inventory[id] || 0) <= 0;
+      const wallet = panel.querySelector('.shop-wallet');
+      if (wallet) wallet.innerHTML = `
+        <span class="w-coin"><img src="${ASSET('coin.png')}" alt=""> ${fmtMoney('coins')}</span>
+        <span class="w-dew"><img src="${ASSET('Dew.png')}" alt=""> ${fmtMoney('dew')}</span>`;
+    };
+    const qtyOf = (id) => {
+      const qtyBtn = panel.querySelector(`.qty-btn[data-for="${id}"].active`);
+      return qtyBtn ? +qtyBtn.dataset.qty : 1;
+    };
 
     // خرید
     panel.querySelectorAll('.shop-buy').forEach(btn => {
       btn.addEventListener('click', () => this.safe(() => {
         const id = btn.dataset.buy;
-        const qtyBtn = panel.querySelector(`.qty-btn[data-for="${id}"].active`);
-        const qty = qtyBtn ? +qtyBtn.dataset.qty : 1;
-        if (this.buyItem(id, qty)) {
-          this.refreshTray();
+        if (this.buyItem(id, qtyOf(id))) {
           this.refreshHud();
-          const have = panel.querySelector(`[data-shop-item="${id}"] .shop-item-have b`);
-          if (have) have.textContent = fmt(state.inventory[id] || 0);
-          const wallet = panel.querySelector('.shop-wallet');
-          if (wallet) wallet.innerHTML = `
-            <span class="w-coin"><img src="${ASSET('coin.png')}" alt=""> ${fmt(state.coins)}</span>
-            <span class="w-dew"><img src="${ASSET('Dew.png')}" alt=""> ${fmt(state.dew)}</span>`;
+          syncRow(id);
+          btn.classList.add('pulse');
+          setTimeout(() => btn.classList.remove('pulse'), 350);
+        }
+      }));
+    });
+
+    // فروش از موجودی
+    panel.querySelectorAll('.shop-sell').forEach(btn => {
+      btn.addEventListener('click', () => this.safe(() => {
+        const id = btn.dataset.sell;
+        if (this.sellItem(id, qtyOf(id))) {
+          syncRow(id);
           btn.classList.add('pulse');
           setTimeout(() => btn.classList.remove('pulse'), 350);
         }
@@ -618,7 +685,7 @@ export class UI {
       </div>
     `).join('');
     const panel = this.openModal(`
-      <div class="shop-header"><h2>✉️ پیام‌ها</h2><button class="modal-close">✕</button></div>
+      <div class="shop-header"><h2>پیام‌ها</h2><button class="modal-close">✕</button></div>
       <div class="mail-list">${rows}</div>
     `, 'panel-mail');
     panel.querySelector('.modal-close').addEventListener('click', () => this.safe(() => this.closeModal()));
@@ -653,7 +720,7 @@ export class UI {
       </div>
     `).join('');
     const panel = this.openModal(`
-      <div class="shop-header"><h2>👥 دوستان</h2><button class="modal-close">✕</button></div>
+      <div class="shop-header"><h2>دوستان</h2><button class="modal-close">✕</button></div>
       <div class="mail-list">${rows}</div>
     `, 'panel-mail');
     panel.querySelector('.modal-close').addEventListener('click', () => this.safe(() => this.closeModal()));
@@ -667,14 +734,14 @@ export class UI {
 
   openSettings() {
     const panel = this.openModal(`
-      <div class="shop-header"><h2>⚙️ تنظیمات</h2><button class="modal-close">✕</button></div>
+      <div class="shop-header"><h2>تنظیمات</h2><button class="modal-close">✕</button></div>
       <div class="settings-list">
         <label class="setting-row">
           <span>صدای بازی</span>
           <input type="checkbox" id="sound-toggle" ${state.sound ? 'checked' : ''}>
         </label>
         <button class="danger-btn" id="reset-btn">شروع دوباره‌ی بازی</button>
-        <div class="about">شهر لوکو 🌳 — نسخه‌ی ۲.۰ (نقشه‌ی بزرگ، زمین‌های قابل پاک‌کردن، مشتری‌های واقعی)</div>
+        <div class="about">شهر لوکو 🌳 — نسخه‌ی ۳.۰ (نقشه‌ی یکپارچه‌ی جنگلی، ساخت‌وساز و درگ گروهی، مسیریابی آدمک‌ها، موبایل)</div>
       </div>
     `, 'panel-settings');
     panel.querySelector('.modal-close').addEventListener('click', () => this.safe(() => this.closeModal()));
@@ -697,7 +764,7 @@ export class UI {
       ? `<button class="building-action" id="building-action-btn" ${ready ? '' : 'disabled'}>
            ${ready ? building.action.label : `⏳ ${fmt(Math.ceil(left))} ثانیه`}
          </button>`
-      : `<button class="building-action" id="building-focus-btn">برو به مزرعه 🌾</button>`;
+      : `<button class="building-action" id="building-focus-btn">برو به مزرعه</button>`;
 
     const panel = this.openModal(`
       <div class="shop-header">

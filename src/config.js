@@ -2,9 +2,15 @@
 
 export const ASSET = (f) => `assets/${f}`;
 
-// ---------- دو صحنه‌ی بازی: شهر و مزرعه ----------
-// مزرعه دیگر داخل صفحه‌ی شهر نیست؛ با کلیک روی ساختمان مزرعه
-// ابرها می‌آیند و وارد فضای جدا و مخصوص مزرعه می‌شوی.
+// ---------- نقشه‌ی یکپارچه: شهر در شمال، مزرعه در جنوب ----------
+// با کشیدن انگشت/موس روی نقشه می‌توانی آزادانه از شهر تا مزرعه حرکت کنی
+// (بینشان جنگل است و بعداً می‌شود جاده کشید). کلیک روی ساختمان مزرعه یا
+// دکمه‌ی کنار صفحه هم با ابرها سریع جابجایت می‌کند.
+export const MAP_BOUNDS = {
+  minX: -19, maxX: 19, minZ: -9.5, maxZ: 93.5,     // محدوده‌ی مجاز ساخت‌وساز و جابجایی
+  panMinX: -16, panMaxX: 16, panMinZ: -6, panMaxZ: 87, // محدوده‌ی حرکت دوربین روی کل نقشه
+};
+
 export const AREAS = {
   town: {
     id: 'town', name: 'شهر',
@@ -22,6 +28,15 @@ export const AREAS = {
 
 // مرکز صحنه‌ی مزرعه (برای چیدن دکور، حصار حیوانات و...)
 export const FARM_CENTER = { x: 0, z: 75 };
+
+// ---------- حالت تست ----------
+// فعلاً برای تست راحت همه‌ی امکانات، سکه و شبنم نامحدود است.
+// برای برگرداندن اقتصاد واقعی کافی است infiniteMoney را false کنی.
+export const TEST_MODE = { infiniteMoney: true };
+export const INFINITE_BALANCE = 999999999;
+
+// هر آیتمی که خریده باشی را می‌توانی در فروشگاه با این نسبتِ قیمت خرید بفروشی
+export const ITEM_SELL_RATIO = 0.5;
 
 // ---------- اقتصاد ----------
 export const PRICES = {
@@ -164,24 +179,24 @@ export const ITEMS = {
   },
   // ---------- ساخت‌وساز (از پکیج مدل دوم) ----------
   fence: {
-    id: 'fence', name: 'حصار چوبی', emoji: '🚧', icon: null,
+    id: 'fence', name: 'حصار چوبی', icon: null, svg: 'fence',
     price: PRICES.build.fence, currency: 'coins', category: 'build', place: 'ground', ghost: 1.25,
-    desc: 'یک تکه حصار. کنار هم بچسبانشان تا دور مزرعه یا حیاط دیوار بکشی. روی حصار ساخته‌شده کلیک کن تا بچرخد؛ دوبار سریع کلیک = برداشتن.',
+    desc: 'یک تکه حصار. کنار هم بچسبانشان تا دور مزرعه یا حیاط دیوار بکشی. حصار ساخته‌شده را با درگ جابجا کن (حصارهای چسبیده با هم میان!)؛ کلیک = چرخش، دوبار کلیک سریع = برداشتن.',
   },
   wall: {
-    id: 'wall', name: 'دیوار', emoji: '🧱', icon: null,
+    id: 'wall', name: 'دیوار', icon: null, svg: 'wall',
     price: PRICES.build.wall, currency: 'coins', category: 'build', place: 'ground', ghost: 1.25,
-    desc: 'یک تکه دیوار بلند و محکم برای دیوارکشی دور هرجا که دوست داری.',
+    desc: 'یک تکه دیوار بلند و محکم. دیوارهای کنار هم را می‌شود با هم درگ‌ودراپ کرد؛ کلیک = چرخش، دوبار کلیک سریع = برداشتن.',
   },
   tent: {
-    id: 'tent', name: 'چادر', emoji: '⛺', icon: null,
+    id: 'tent', name: 'چادر', icon: null, svg: 'tent',
     price: PRICES.build.tent, currency: 'coins', category: 'build', place: 'ground', ghost: 2.3,
-    desc: 'یک چادر قشنگ برای تزیین مزرعه یا شهر (۲×۲ خانه).',
+    desc: 'یک چادر قشنگ برای تزیین مزرعه یا شهر (۲×۲ خانه). با درگ جابجا می‌شود.',
   },
   house: {
-    id: 'house', name: 'خانه‌ی چوبی', emoji: '🏠', icon: null,
+    id: 'house', name: 'خانه‌ی چوبی', icon: null, svg: 'house',
     price: PRICES.build.house, currency: 'coins', category: 'build', place: 'ground', ghost: 3.3,
-    desc: 'یک خانه‌ی چوبی با سقف، برای ساختن محله‌ی خودت (۳×۳ خانه).',
+    desc: 'یک خانه‌ی چوبی با سقف، برای ساختن محله‌ی خودت (۳×۳ خانه). با درگ جابجا می‌شود.',
   },
 };
 

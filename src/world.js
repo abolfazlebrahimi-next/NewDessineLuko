@@ -1,6 +1,6 @@
 // ================= جهان بازی با Three.js =================
 import * as THREE from 'three';
-import { ASSET, AREAS } from './config.js';
+import { ASSET, AREAS, MAP_BOUNDS } from './config.js';
 
 const VIEW_HEIGHT = 15.2;      // ارتفاع دید ارتوگرافیک
 const CAM_POS = new THREE.Vector3(0, 13.5, 11.8);
@@ -256,6 +256,12 @@ export class World {
     this.placementGhost.material.opacity = 0.85;
   }
 
+  // پد جانمایی مستطیلی (برای درگ گروهی دیوارها/حصارها)
+  showPlacementGhostRect(x, z, w, d, valid) {
+    this.showPlacementGhost(x, z, w, valid);
+    if (this.placementGhost) this.placementGhost.scale.set(w, d, 1);
+  }
+
   hidePlacementGhost() {
     if (this.placementGhost) this.placementGhost.visible = false;
   }
@@ -340,6 +346,17 @@ export class World {
     return hits.length ? hits[0].object : null;
   }
 
+  // ری‌کست روی مش‌های اینستنس‌شده‌ی جنگل (برای پاک‌کردن درخت/سنگ/علف با کلیک)
+  pickInstanced(objects, clientX, clientY) {
+    if (!objects || !objects.length) return null;
+    const rect = this.canvas.getBoundingClientRect();
+    this.pointerNdc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    this.pointerNdc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    this.raycaster.setFromCamera(this.pointerNdc, this.camera);
+    const hits = this.raycaster.intersectObjects(objects, false);
+    return hits.length ? hits[0] : null;
+  }
+
   pickGround(clientX, clientY) {
     const rect = this.canvas.getBoundingClientRect();
     this.pointerNdc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
@@ -371,9 +388,10 @@ export class World {
     right.crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize().negate();
     this.panTarget.addScaledVector(right, dx * worldPerPixel);
     this.panTarget.addScaledVector(fwd, -dy * worldPerPixel * 1.35);
-    const a = this.area;
-    this.panTarget.x = THREE.MathUtils.clamp(this.panTarget.x, a.panMinX, a.panMaxX);
-    this.panTarget.z = THREE.MathUtils.clamp(this.panTarget.z, a.panMinZ, a.panMaxZ);
+    // دوربین روی کل نقشه آزاد است: با کشیدن می‌توانی از شهر تا مزرعه بروی
+    const B = MAP_BOUNDS;
+    this.panTarget.x = THREE.MathUtils.clamp(this.panTarget.x, B.panMinX, B.panMaxX);
+    this.panTarget.z = THREE.MathUtils.clamp(this.panTarget.z, B.panMinZ, B.panMaxZ);
   }
 
   zoomBy(delta) {
@@ -381,12 +399,17 @@ export class World {
     this.zoom = THREE.MathUtils.clamp(this.zoom * (delta > 0 ? 0.93 : 1.07), ZOOM_MIN, ZOOM_MAX);
   }
 
+  // زوم لمسی (پینچ با دو انگشت روی موبایل)
+  zoomTo(z) {
+    this.zoom = THREE.MathUtils.clamp(z, ZOOM_MIN, ZOOM_MAX);
+  }
+
   focusOn(x, z, zoom = 1.15) {
-    const a = this.area;
+    const B = MAP_BOUNDS;
     this.panTarget.set(
-      THREE.MathUtils.clamp(x, a.panMinX, a.panMaxX),
+      THREE.MathUtils.clamp(x, B.panMinX, B.panMaxX),
       0,
-      THREE.MathUtils.clamp(z - 1.2, a.panMinZ, a.panMaxZ)
+      THREE.MathUtils.clamp(z - 1.2, B.panMinZ, B.panMaxZ)
     );
     this.zoom = THREE.MathUtils.clamp(zoom, ZOOM_MIN, ZOOM_MAX);
   }
