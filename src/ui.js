@@ -329,21 +329,31 @@ export class UI {
   buildTray() {
     const tray = document.createElement('div');
     tray.id = 'tray';
-    tray.innerHTML = `
-      <button class="tray-arrow" id="tray-prev" aria-label="قبلی">◀</button>
-      <div class="tray-scroll" id="tray-scroll"></div>
-      <button class="tray-arrow" id="tray-next" aria-label="بعدی">▶</button>`;
+    // بدون فلش چپ/راست — با انگشت یا موس خودت بکش
+    tray.innerHTML = `<div class="tray-scroll" id="tray-scroll"></div>`;
     document.getElementById('overlay').appendChild(tray);
 
     this.trayScroll = tray.querySelector('#tray-scroll');
     this._traySignature = null;
 
-    tray.querySelector('#tray-prev').addEventListener('click', () => {
-      this.trayScroll.scrollBy({ left: 320, behavior: 'smooth' });
+    // با موس: غلتک = اسکرول افقی سینی؛ کشیدن روی فضای خالی سینی = اسکرول
+    this.trayScroll.addEventListener('wheel', (e) => {
+      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+        e.preventDefault();
+        this.trayScroll.scrollLeft += e.deltaY;
+      }
+    }, { passive: false });
+    let trayDrag = null;
+    this.trayScroll.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('.card')) return; // روی کارت = درگ کارت
+      trayDrag = { x: e.clientX, left: this.trayScroll.scrollLeft };
     });
-    tray.querySelector('#tray-next').addEventListener('click', () => {
-      this.trayScroll.scrollBy({ left: -320, behavior: 'smooth' });
+    this.trayScroll.addEventListener('pointermove', (e) => {
+      if (trayDrag) this.trayScroll.scrollLeft = trayDrag.left - (e.clientX - trayDrag.x);
     });
+    const endTrayDrag = () => { trayDrag = null; };
+    this.trayScroll.addEventListener('pointerup', endTrayDrag);
+    this.trayScroll.addEventListener('pointercancel', endTrayDrag);
 
     this.refreshTray();
   }
@@ -379,8 +389,7 @@ export class UI {
       card.innerHTML = `
         <div class="card-title">${item.name}</div>
         <div class="card-count" data-count="${id}">${fmt(state.inventory[id] || 0)}</div>
-        <div class="card-img">${this.itemIconHtml(item)}</div>
-        <div class="card-hint">بکش و بینداز</div>`;
+        <div class="card-img">${this.itemIconHtml(item)}</div>`;
       card.addEventListener('pointerdown', (e) => this.safe(() => this.onCardPointerDown(e, id)));
       scroll.appendChild(card);
     }
@@ -445,14 +454,18 @@ export class UI {
     const item = ITEMS[itemId];
     ghost.innerHTML = `${this.itemIconHtml(item)}<span>${item.name}</span>`;
     ghost.style.display = 'flex';
+    // روی لمسی، کارت بالای انگشت شناور می‌شود و همان‌جا هم می‌افتد
+    this.dragOffY = e.pointerType === 'touch' ? -74 : 0;
     this.dragItem = itemId;
     this.dragMoved = false;
     const move = (ev) => {
       this.dragMoved = true;
-      ghost.style.left = ev.clientX + 'px';
-      ghost.style.top = ev.clientY + 'px';
-      const mesh = this.world.pick(ev.clientX, ev.clientY);
-      const ground = this.world.pickGround(ev.clientX, ev.clientY);
+      const px = ev.clientX;
+      const py = ev.clientY + (this.dragOffY || 0);
+      ghost.style.left = px + 'px';
+      ghost.style.top = py + 'px';
+      const mesh = this.world.pick(px, py);
+      const ground = this.world.pickGround(px, py);
       if (mesh && mesh.userData.type === 'plot' && !isGroundItem(itemId)) {
         this.world.showPlacementGhost(mesh.position.x, mesh.position.z, 2.4, true);
         this.dropTarget = { plotId: mesh.userData.id.slice(5), point: null };
@@ -480,7 +493,7 @@ export class UI {
         return;
       }
       if (!target) {
-        const mesh = this.world.pick(ev.clientX, ev.clientY);
+        const mesh = this.world.pick(ev.clientX, ev.clientY + (this.dragOffY || 0));
         if (mesh && mesh.userData.type === 'building') {
           this.toast('این کارت روی ساختمان کار نمی‌کند؛ روی مزرعه بینداز.');
         } else {
@@ -496,7 +509,7 @@ export class UI {
       this.onDropItem(itemId, target);
     };
     ghost.style.left = e.clientX + 'px';
-    ghost.style.top = e.clientY + 'px';
+    ghost.style.top = (e.clientY + (this.dragOffY || 0)) + 'px';
     document.addEventListener('pointermove', move);
     document.addEventListener('pointerup', up);
   }
@@ -570,13 +583,12 @@ export class UI {
     const items = Object.values(ITEMS).filter(i => i.category === category).map(i => {
       const sellOne = Math.max(1, Math.floor(i.price * ITEM_SELL_RATIO));
       const curImg = ASSET(i.currency === 'dew' ? 'Dew.png' : 'coin.png');
+      const have = state.inventory[i.id] || 0;
       return `
       <div class="shop-item" data-shop-item="${i.id}">
-        <div class="shop-item-rarity"></div>
-        <div class="shop-item-img">${this.itemIconHtml(i)}</div>
+        <button class="shop-info" data-info="${i.id}" aria-label="توضیح">!</button>
+        <div class="shop-item-img">${this.itemIconHtml(i)}<span class="shop-have-badge" data-have="${i.id}">${have ? '×' + fmt(have) : ''}</span></div>
         <div class="shop-item-name">${i.name}</div>
-        <div class="shop-item-desc">${i.desc}</div>
-        <div class="shop-item-have">در کارت‌ها: <b>${fmt(state.inventory[i.id] || 0)}</b></div>
         <div class="shop-qty">
           ${BUY_STEPS.map((q, qi) => `
             <button class="qty-btn ${qi === 0 ? 'active' : ''}" data-qty="${q}" data-for="${i.id}">×${fmt(q)}</button>
@@ -586,7 +598,7 @@ export class UI {
           <button class="shop-buy" data-buy="${i.id}">
             خرید <img src="${curImg}" alt=""> <span data-total="${i.id}">${fmt(i.price)}</span>
           </button>
-          <button class="shop-sell" data-sell="${i.id}" ${(state.inventory[i.id] || 0) > 0 ? '' : 'disabled'}>
+          <button class="shop-sell" data-sell="${i.id}" ${have > 0 ? '' : 'disabled'}>
             فروش <img src="${curImg}" alt=""> <span data-selltotal="${i.id}">${fmt(sellOne)}</span>
           </button>
         </div>
@@ -602,10 +614,17 @@ export class UI {
         </div>
         <button class="modal-close">✕</button>
       </div>
-      <div class="shop-hint">هرچه بخری به کارت‌های پایین صفحه اضافه می‌شود و هرچه داری را از همین‌جا می‌توانی بفروشی.</div>
       <div class="shop-body">
         <div class="shop-cats">${cats}</div>
         <div class="shop-grid">${items}</div>
+      </div>
+      <div class="item-info-pop" hidden>
+        <div class="item-info-card">
+          <div class="item-info-img"></div>
+          <div class="item-info-name"></div>
+          <p class="item-info-desc"></p>
+          <button class="item-info-back">برگرد</button>
+        </div>
       </div>`;
 
     panel.querySelector('.modal-close').addEventListener('click', () => this.safe(() => this.closeModal()));
@@ -629,8 +648,11 @@ export class UI {
 
     // به‌روزرسانی ظاهری ردیف یک آیتم بعد از خرید/فروش
     const syncRow = (id) => {
-      const have = panel.querySelector(`[data-shop-item="${id}"] .shop-item-have b`);
-      if (have) have.textContent = fmt(state.inventory[id] || 0);
+      const badge = panel.querySelector(`[data-have="${id}"]`);
+      if (badge) {
+        const n = state.inventory[id] || 0;
+        badge.textContent = n ? '×' + fmt(n) : '';
+      }
       const sellBtn = panel.querySelector(`[data-sell="${id}"]`);
       if (sellBtn) sellBtn.disabled = (state.inventory[id] || 0) <= 0;
       const wallet = panel.querySelector('.shop-wallet');
@@ -642,6 +664,25 @@ export class UI {
       const qtyBtn = panel.querySelector(`.qty-btn[data-for="${id}"].active`);
       return qtyBtn ? +qtyBtn.dataset.qty : 1;
     };
+
+    // دکمه‌ی «!» — پنجره‌ی توضیح آیتم با دکمه‌ی برگشت
+    const infoPop = panel.querySelector('.item-info-pop');
+    const closeInfo = () => { if (infoPop) infoPop.hidden = true; };
+    if (infoPop) {
+      infoPop.addEventListener('click', (e) => { if (e.target === infoPop) closeInfo(); });
+      infoPop.querySelector('.item-info-back').addEventListener('click', () => this.safe(closeInfo));
+    }
+    panel.querySelectorAll('.shop-info').forEach(btn => {
+      btn.addEventListener('click', () => this.safe(() => {
+        const item = ITEMS[btn.dataset.info];
+        if (!item || !infoPop) return;
+        infoPop.querySelector('.item-info-img').innerHTML = this.itemIconHtml(item);
+        infoPop.querySelector('.item-info-name').textContent = item.name;
+        infoPop.querySelector('.item-info-desc').textContent = item.desc;
+        infoPop.hidden = false;
+        sfx.click();
+      }));
+    });
 
     // خرید
     panel.querySelectorAll('.shop-buy').forEach(btn => {

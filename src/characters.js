@@ -679,11 +679,10 @@ export class Characters {
       chat.lineTimer = CHARACTERS.chat.lineSec;
       const speaker = chat.lineIdx % 2 === 0 ? chat.a : chat.b;
       const other = speaker === chat.a ? chat.b : chat.a;
+      // فقط کنار هم می‌ایستند و با حرکت دست گپ می‌زنند — بدون حباب متن
       other.talking = false;
-      this._hideBubble(other);
       this._playAction(other, 'idle');
       speaker.talking = true;
-      this._say(speaker, chat.lines[chat.lineIdx], CHARACTERS.chat.lineSec + 0.15);
       this._playAction(speaker, speaker.actions && speaker.actions['emote-yes'] ? 'emote-yes' : 'idle');
     }
     if (chat.dur <= 0) this._endChat(chat);

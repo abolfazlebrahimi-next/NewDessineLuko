@@ -112,27 +112,28 @@ export class Constructions {
     if (cx < B.minX || cx > B.maxX || cz < B.minZ || cz > B.maxZ) return 'bounds';
     const f = LAYOUT.field;
     const fieldRect = {
-      minX: f.cx - (f.cols * f.spacing) / 2 - 0.3, maxX: f.cx + (f.cols * f.spacing) / 2 + 0.3,
-      minZ: f.cz - (f.rows * f.spacing) / 2 - 0.3, maxZ: f.cz + (f.rows * f.spacing) / 2 + 0.3,
+      minX: f.cx - (f.cols * f.spacing) / 2 - 0.05, maxX: f.cx + (f.cols * f.spacing) / 2 + 0.05,
+      minZ: f.cz - (f.rows * f.spacing) / 2 - 0.05, maxZ: f.cz + (f.rows * f.spacing) / 2 + 0.05,
     };
     const pen = LAYOUT.animalPen;
     if (cx > fieldRect.minX && cx < fieldRect.maxX && cz > fieldRect.minZ && cz < fieldRect.maxZ) return 'field';
     if (cx > pen.minX && cx < pen.maxX && cz > pen.minZ && cz < pen.maxZ) return 'pen';
-    if (Math.hypot(cx - LAYOUT.farmhouse.x, cz - LAYOUT.farmhouse.z) < 2.9) return 'overlap';
-    // روی جایگاه کشت نه
+    if (Math.hypot(cx - LAYOUT.farmhouse.x, cz - LAYOUT.farmhouse.z) < 2.1) return 'overlap';
+    // روی جایگاه کشت نه — ولی چسبیده به آن اشکالی ندارد (حصار دور زمین!)
     for (const p of state.plots) {
       const pp = cellPosition(p.cell);
-      if (Math.hypot(pp.x - cx, pp.z - cz) < 1.35) return 'overlap';
+      if (Math.abs(pp.x - cx) < 1.15 && Math.abs(pp.z - cz) < 0.85) return 'overlap';
     }
-    // روی درخت/سنگ نه
+    // فقط خانه‌ای که خودِ تنه‌ی درخت/سنگ داخلش است بسته است؛ بغلش آزاد است
     for (const ob of state.obstacles) {
-      if (Math.hypot(ob.x - cx, ob.z - cz) < 0.95) return 'obstacle';
+      const r = ob.kind === 'tree' ? 0.6 : 0.7;
+      if (Math.hypot(ob.x - cx, ob.z - cz) < r) return 'obstacle';
     }
-    // روی ساختمان‌های شهر نه
+    // روی ساختمان‌های شهر نه (فقط پایه‌ی ساختمان، نه دور و برش)
     for (const b of LAYOUT.buildings) {
       const sp = this.world.getSprite('building:' + b.id);
       if (!sp) continue;
-      if (Math.abs(sp.position.x - cx) < b.w * 0.42 && Math.abs(sp.position.z - cz) < 1.15) return 'overlap';
+      if (Math.abs(sp.position.x - cx) < b.w * 0.36 && Math.abs(sp.position.z - cz) < 0.8) return 'overlap';
     }
     return null;
   }
@@ -208,9 +209,7 @@ export class Constructions {
     this.world.explode(c.x, 0.35, c.z, 0xd8b083);
     sfx.drop();
     const item = ITEMS[itemId];
-    this.ui.toast(spec.rotatable
-      ? `${item.name} ساخته شد! با درگ جابجایش کن (چسبیده‌ها با هم میان)، کلیک = چرخش، دوبار کلیک سریع = برداشتن`
-      : `${item.name} ساخته شد! با درگ جابجایش کن؛ دوبار کلیک سریع رویش = برداشتن`);
+    this.ui.toast(`${item.name} ساخته شد`);
     save();
     return true;
   }

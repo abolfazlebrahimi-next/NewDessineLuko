@@ -103,5 +103,8 @@ check('آیتم‌های ساخت آیکون برداری دارند، نه ای
 markDecorRemoved(424242);
 check('درخت پاک‌شده‌ی جنگل در وضعیت ذخیره شد', state.removedDecor.includes(424242));
 
+check('همه‌ی آیتم‌های فروشگاه توضیح دارند (برای دکمه‌ی !)',
+  Object.values(ITEMS).every(i => i.desc && i.desc.length > 3));
+
 console.log(failed ? `\n${failed} تست رد شد!` : '\nهمه‌ی تست‌های منطق بازی پاس شدند ✓');
 process.exit(failed ? 1 : 0);

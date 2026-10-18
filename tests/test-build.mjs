@@ -113,6 +113,13 @@ check('جابجایی گروه روی خودش/جای اشغال رد می‌ش�
     added[0].area === 'town' && added[1].area === 'farm');
 }
 
+// --- جانمایی راحت‌تر: چسبیده به درخت می‌شود ساخت، روی خود درخت نه ---
+{
+  const tree = state.obstacles.find(o => o.cell === null && o.kind === 'tree' && o.area === 'town');
+  check('کنار تنه‌ی درخت ساختن آزاد است', cons._cellWorldError(tree.x + 0.85, tree.z) !== 'obstacle');
+  check('روی خود درخت نمی‌شود ساخت', cons._cellWorldError(tree.x + 0.25, tree.z) === 'obstacle');
+}
+
 // --- ناوبری آدمک‌ها: مسیر دور خانه می‌گردد، از وسطش رد نمی‌شود ---
 const chars = new Characters(fakeWorld, fakeUi);
 const houseC = cons.centerOf(house);

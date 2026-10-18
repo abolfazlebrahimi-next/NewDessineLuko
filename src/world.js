@@ -387,7 +387,8 @@ export class World {
     fwd.normalize();
     right.crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize().negate();
     this.panTarget.addScaledVector(right, dx * worldPerPixel);
-    this.panTarget.addScaledVector(fwd, -dy * worldPerPixel * 1.35);
+    // نقشه زیر انگشت حرکت می‌کند: انگشت بالا → نقشه بالا می‌رود (جهت طبیعی لمسی)
+    this.panTarget.addScaledVector(fwd, dy * worldPerPixel * 1.35);
     // دوربین روی کل نقشه آزاد است: با کشیدن می‌توانی از شهر تا مزرعه بروی
     const B = MAP_BOUNDS;
     this.panTarget.x = THREE.MathUtils.clamp(this.panTarget.x, B.panMinX, B.panMaxX);

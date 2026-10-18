@@ -39,22 +39,12 @@ function boot() {
       width: b.w,
       y: 0.02,
     });
-    const sp = world.getSprite('building:' + b.id);
-    const labelY = sp ? sp.scale.y + 0.35 : 3.5;
-    ui.showPlotLabel('b_' + b.id, pos.x, pos.z, b.name, labelY);
-    const el = ui.plotLabels.get('b_' + b.id);
-    if (el) el.classList.add('building-label');
   }
 
   // ---------- خانه‌ی مزرعه در صحنه‌ی مزرعه (دروازه‌ی برگشت به شهر) ----------
   {
     const fh = LAYOUT.farmhouse;
     world.addSprite({ tag: 'portal:farmhouse', file: 'Farm.png', x: fh.x, z: fh.z, width: fh.w, y: 0.02 });
-    const sp = world.getSprite('portal:farmhouse');
-    const labelY = sp ? sp.scale.y + 0.35 : 3.5;
-    ui.showPlotLabel('farmhouse', fh.x, fh.z, 'خانه‌ی مزرعه — برگشت به شهر', labelY);
-    const el = ui.plotLabels.get('farmhouse');
-    if (el) el.classList.add('building-label');
   }
 
   // ---------- مزرعه، موانع و سازه‌ها ----------
@@ -158,7 +148,6 @@ function boot() {
     panning = false;
     canvas.classList.add('grabbing');
     sfx.whoosh();
-    ui.toast('بکش و در جای مناسب رها کن ✋ (سبز = مجاز)');
   }
 
   // شروع درگ یک سازه — سازه‌های هم‌نوعِ چسبیده، با هم می‌آیند
@@ -176,9 +165,6 @@ function boot() {
     constructions.lastClick = { id: null, time: 0 }; // درگ، دبل‌کلیک حساب نمی‌شود
     canvas.classList.add('grabbing');
     sfx.whoosh();
-    ui.toast(group.length > 1
-      ? `${group.length} سازه‌ی چسبیده با هم جابجا می‌شوند — بکش و رها کن`
-      : 'بکش و در جای مناسب رها کن (سبز = مجاز)');
     return true;
   }
 
@@ -305,13 +291,6 @@ function boot() {
     if (d.kind === 'building') {
       const id = d.id.slice(9);
       setBuildingPos(id, d.target.x, d.target.z);
-      ui.hidePlotLabel('b_' + id);
-      const sp = world.getSprite(d.id);
-      const labelY = sp ? sp.scale.y + 0.35 : 3.5;
-      ui.showPlotLabel('b_' + id, d.target.x, d.target.z,
-        (LAYOUT.buildings.find(b => b.id === id) || {}).name || id, labelY);
-      const el = ui.plotLabels.get('b_' + id);
-      if (el) el.classList.add('building-label');
       sfx.pop();
       ui.toast('ساختمان جابجا شد! 🏗️');
     } else if (d.kind === 'plot') {
@@ -485,9 +464,6 @@ function boot() {
         if (rec) {
           world.explode(rec.x, 0.5, rec.z, rec.type === 'rock' ? 0xbfc7cc : 0x7fc95a);
           sfx.boom();
-          ui.toast(rec.type === 'tree'
-            ? 'درخت جنگلی پاک شد! کم‌کم می‌شود بین شهر و مزرعه راه باز کرد.'
-            : rec.type === 'rock' ? 'سنگ جنگلی پاک شد!' : 'علف پاک شد!');
         } else {
           obstacles.deselect();
         }
@@ -526,16 +502,10 @@ function boot() {
     if (e.target === canvas) e.preventDefault();
   }, { passive: false });
 
-  // خوش‌آمد
+  // خوش‌آمد (کوتاه و بی‌سروصدا)
   setTimeout(() => {
-    ui.toast('به شهر لوکو خوش آمدی! فعلاً سکه‌ات بی‌نهایت است تا راحت همه‌چیز را امتحان کنی. نقشه را با انگشت بکش تا از شهر به مزرعه بروی (یا روی ساختمان مزرعه کلیک کن).');
+    ui.toast('به شهر لوکو خوش آمدی! سکه‌ات فعلاً بی‌نهایت است.');
   }, 600);
-  setTimeout(() => {
-    ui.toast('همه‌جای دور نقشه جنگل است. روی هر درخت، سنگ یا علف جنگل کلیک کنی پاک می‌شود؛ این‌طوری بین شهر و مزرعه راه باز می‌شود.');
-  }, 5200);
-  setTimeout(() => {
-    ui.toast('از فروشگاه دسته‌بندی‌شده بخر تا به کارت‌های پایین اضافه شود؛ از همان‌جا می‌توانی بفروشی هم. دیوارها و حصارها را با درگ جابجا کن — چندتای چسبیده با هم می‌آیند!');
-  }, 11500);
 }
 
 if (document.readyState === 'loading') {

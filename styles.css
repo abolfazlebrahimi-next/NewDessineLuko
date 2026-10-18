@@ -171,7 +171,7 @@ html, body {
 
 /* ================= دکمه‌های کناری ================= */
 #hud-side {
-  position: absolute; left: 14px; bottom: 132px;
+  position: absolute; left: 14px; bottom: 108px;
   display: flex; flex-direction: column; gap: 10px;
 }
 .side-btn {
@@ -211,20 +211,12 @@ html, body {
 
 /* ================= سینی کارت‌ها ================= */
 #tray {
-  position: absolute; bottom: 10px; left: 50%;
+  position: absolute; bottom: 8px; left: 50%;
   transform: translateX(-50%);
   width: min(1080px, 94vw);
-  height: 112px;
+  height: 96px;
   display: flex; align-items: stretch; gap: 8px;
 }
-.tray-arrow {
-  width: 44px; border-radius: 14px;
-  background: linear-gradient(#8a5a2b, #5f3b17);
-  border: 3px solid var(--gold-dark);
-  color: #ffe9b8; font-size: 20px;
-  cursor: pointer;
-}
-.tray-arrow:active { transform: scale(.95); }
 .tray-scroll {
   flex: 1; display: flex; gap: 10px;
   overflow-x: auto; overflow-y: hidden;
@@ -242,7 +234,7 @@ html, body {
 
 .card {
   position: relative;
-  flex: 0 0 122px;
+  flex: 0 0 104px;
   border-radius: 16px;
   background: linear-gradient(180deg, #fffdf6, #f2e2c2);
   border: 3px solid var(--wood);
@@ -298,7 +290,6 @@ html, body {
 .shop-cat-ico .item-svg { width: 26px; height: 26px; filter: none; }
 .side-ico img { width: 34px; height: 26px; object-fit: contain; }
 .shop-cat-ico img { width: 28px; height: 28px; object-fit: contain; }
-.card-hint { font-size: 9.5px; font-weight: 700; color: #a3815a; }
 .tray-empty {
   flex: 1;
   border: 3px dashed var(--wood);
@@ -381,7 +372,7 @@ html, body {
 /* ================= درگ ================= */
 #drag-ghost {
   position: fixed; z-index: 300;
-  transform: translate(-50%, -125%); /* بالای انگشت دیده شود */
+  transform: translate(-50%, -50%); /* آفست لمسی در JS اعمال می‌شود */
   display: none;
   flex-direction: column; align-items: center;
   background: rgba(253, 243, 220, 0.92);
@@ -573,14 +564,6 @@ html, body {
   color: #ffe9b8; font-weight: 900; font-size: 15px;
 }
 .shop-wallet img { width: 26px; height: 26px; object-fit: contain; }
-.shop-hint {
-  background: #2a1808;
-  color: #e8c589;
-  font-size: 12.5px; font-weight: 700;
-  text-align: center;
-  padding: 7px 12px;
-  border-bottom: 2px solid var(--gold-dark);
-}
 
 .shop-body { display: flex; flex: 1; overflow: hidden; min-height: 0; }
 
@@ -616,10 +599,13 @@ html, body {
 /* گرید آیتم‌ها */
 .shop-grid {
   flex: 1;
+  min-height: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
-  gap: 15px;
-  padding: 18px;
+  grid-template-columns: repeat(auto-fill, minmax(178px, 1fr));
+  align-content: start;
+  align-items: start;
+  gap: 13px;
+  padding: 15px;
   overflow-y: auto;
   background:
     linear-gradient(180deg, rgba(252, 240, 214, .97), rgba(234, 213, 176, .97));
@@ -633,18 +619,27 @@ html, body {
   position: relative;
   background: linear-gradient(180deg, #fffdf6, #f4e6c8);
   border: 3px solid var(--wood);
-  border-radius: 18px;
-  padding: 14px 12px 12px;
+  border-top: 6px solid var(--gold);
+  border-radius: 16px;
+  padding: 10px 10px 11px;
   display: flex; flex-direction: column; align-items: center;
   box-shadow: 0 6px 14px rgba(74, 40, 8, .25), inset 0 1px 0 #fff;
-  overflow: hidden;
 }
-.shop-item-rarity {
-  position: absolute; top: 0; right: 0; left: 0; height: 5px;
-  background: linear-gradient(90deg, #f7c948, #e8a33d, #f7c948);
+/* دکمه‌ی توضیح «!» */
+.shop-info {
+  position: absolute; top: 6px; left: 6px;
+  width: 25px; height: 25px; border-radius: 50%;
+  background: linear-gradient(#6db9ec, #2b7fc4);
+  border: 2px solid #1d5c94;
+  color: #fff; font-size: 15px; font-weight: 900; line-height: 1;
+  cursor: pointer; z-index: 3;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 5px rgba(0,0,0,.3);
 }
+.shop-info:active { transform: scale(.92); }
 .shop-item-img {
-  width: 96px; height: 96px;
+  position: relative;
+  width: 68px; height: 68px;
   background:
     radial-gradient(circle at 35% 30%, rgba(255,255,255,.9), rgba(214, 187, 143, .55));
   border: 3px solid var(--gold-dark);
@@ -653,23 +648,27 @@ html, body {
   box-shadow: inset 0 -6px 12px rgba(120, 80, 30, .18);
 }
 .shop-item-img img {
-  max-width: 74px; max-height: 74px; object-fit: contain;
+  max-width: 52px; max-height: 52px; object-fit: contain;
   filter: drop-shadow(0 4px 6px rgba(0,0,0,.28));
 }
+.shop-item-img .item-svg { width: 46px; height: 46px; }
+/* نشان تعداد موجودی روی عکس */
+.shop-have-badge {
+  position: absolute; bottom: -7px; inset-inline-end: -7px;
+  background: linear-gradient(180deg, #6fd07c, #3ea750);
+  color: #fff;
+  border: 2px solid #fff; border-radius: 12px;
+  min-width: 26px; height: 21px; padding: 0 5px;
+  font-size: 11.5px; font-weight: 900;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 5px rgba(0,0,0,.3);
+}
+.shop-have-badge:empty { display: none; }
 .shop-item-name {
-  margin-top: 9px;
-  color: var(--brown-txt); font-size: 16.5px; font-weight: 900;
+  margin-top: 7px;
+  color: var(--brown-txt); font-size: 15px; font-weight: 900;
+  text-align: center;
 }
-.shop-item-desc {
-  margin-top: 3px;
-  color: #8a6a45; font-size: 11.5px;
-  text-align: center; min-height: 32px; line-height: 1.7;
-}
-.shop-item-have {
-  margin-top: 5px;
-  font-size: 11.5px; color: var(--green-dark); font-weight: 700;
-}
-.shop-item-have b { font-size: 13px; }
 
 .shop-qty {
   display: flex; gap: 5px; margin-top: 8px;
@@ -731,6 +730,48 @@ html, body {
   cursor: default;
 }
 .shop-sell.pulse { animation: bump .35s ease; }
+
+/* پنجره‌ی توضیح آیتم (دکمه‌ی «!») */
+.item-info-pop {
+  position: absolute; inset: 0; z-index: 6;
+  background: rgba(20, 12, 4, .58);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+}
+.item-info-pop[hidden] { display: none; }
+.item-info-card {
+  width: min(330px, 88%);
+  background: linear-gradient(#fdf3dc, #f0e2c2);
+  border: 4px solid var(--gold-dark);
+  border-radius: 20px;
+  padding: 20px 18px 16px;
+  display: flex; flex-direction: column; align-items: center;
+  box-shadow: 0 18px 44px rgba(0,0,0,.5);
+}
+.item-info-img {
+  width: 84px; height: 84px;
+  background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.9), rgba(214, 187, 143, .55));
+  border: 3px solid var(--gold-dark); border-radius: 18px;
+  display: flex; align-items: center; justify-content: center;
+}
+.item-info-img img { max-width: 62px; max-height: 62px; object-fit: contain; }
+.item-info-img .item-svg { width: 56px; height: 56px; }
+.item-info-name { margin-top: 10px; color: var(--brown-txt); font-size: 18px; font-weight: 900; }
+.item-info-desc {
+  margin-top: 6px;
+  color: #7a5a35; font-size: 13.5px; line-height: 2;
+  text-align: center;
+}
+.item-info-back {
+  margin-top: 14px; width: 100%;
+  background: linear-gradient(#7fdc7f, #3ea750);
+  border: 2px solid #2c7c3a; border-radius: 13px;
+  color: #fff; font-size: 15px; font-weight: 900;
+  padding: 10px;
+  cursor: pointer;
+  box-shadow: 0 4px 0 #245c2e;
+}
+.item-info-back:active { transform: translateY(2px); box-shadow: 0 2px 0 #245c2e; }
 
 /* پیام‌ها و دوستان */
 .mail-list {
@@ -829,6 +870,21 @@ html, body {
 }
 .building-action:active:not(:disabled) { transform: scale(.96); }
 
+/* ================= پنجره‌ی کوچک / تبلت ================= */
+@media (max-width: 1100px) {
+  .level-badge { width: 54px; height: 54px; font-size: 22px; }
+  .xp-wrap { min-width: 148px; padding: 5px 9px; }
+  .currency-row { font-size: 16px; min-width: 130px; padding: 4px 12px; }
+  .currency-row img { width: 30px; height: 30px; }
+  .hud-icon-btn { width: 44px; height: 44px; }
+  .side-btn { width: 68px; height: 62px; font-size: 10.5px; }
+  #hud-side { bottom: 102px; }
+  #tray { height: 92px; width: min(880px, 96vw); }
+  .card { flex: 0 0 96px; }
+  .shop-cats { width: 134px; }
+  .shop-grid { grid-template-columns: repeat(auto-fill, minmax(164px, 1fr)); gap: 11px; padding: 13px; }
+}
+
 /* ================= موبایل ================= */
 @media (max-width: 760px) {
   /* HUD فشرده */
@@ -844,8 +900,8 @@ html, body {
   .ico { width: 23px; height: 23px; }
 
   /* دکمه‌های کناری کوچک بالای سینی */
-  #hud-side { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); left: 6px; gap: 6px; }
-  .side-btn { width: 56px; height: 52px; font-size: 9.5px; border-radius: 12px; border-width: 2px; }
+  #hud-side { bottom: calc(88px + env(safe-area-inset-bottom, 0px)); left: 6px; gap: 5px; }
+  .side-btn { width: 49px; height: 48px; font-size: 8.5px; border-radius: 12px; border-width: 2px; }
   .side-ico { width: 21px; height: 21px; }
   .side-ico .ico { width: 21px; height: 21px; }
   .side-ico img { width: 27px; height: 20px; }
@@ -856,18 +912,16 @@ html, body {
     left: 0; right: 0; bottom: 0;
     transform: none;
     width: 100%;
-    height: calc(92px + env(safe-area-inset-bottom, 0px));
-    padding: 4px 6px calc(6px + env(safe-area-inset-bottom, 0px));
+    height: calc(80px + env(safe-area-inset-bottom, 0px));
+    padding: 3px 5px calc(5px + env(safe-area-inset-bottom, 0px));
     gap: 0;
   }
-  .tray-arrow { display: none; }
-  .tray-scroll { gap: 7px; }
-  .card { flex: 0 0 86px; border-radius: 12px; padding: 4px 5px 5px; border-width: 2px; }
-  .card-title { font-size: 10px; }
-  .card-count { width: 23px; height: 23px; font-size: 11px; top: -6px; right: -6px; }
-  .card-img img { max-width: 46px; max-height: 36px; }
-  .card-img .item-svg { width: 32px; height: 32px; }
-  .card-hint { display: none; }
+  .tray-scroll { gap: 6px; }
+  .card { flex: 0 0 74px; border-radius: 11px; padding: 3px 4px 4px; border-width: 2px; }
+  .card-title { font-size: 9px; }
+  .card-count { width: 21px; height: 21px; font-size: 10px; top: -5px; right: -5px; }
+  .card-img img { max-width: 40px; max-height: 30px; }
+  .card-img .item-svg { width: 27px; height: 27px; }
   .tray-empty { font-size: 12px; }
 
   /* توست و برچسب */
@@ -889,8 +943,7 @@ html, body {
   .shop-wallet { gap: 6px; }
   .shop-wallet span { font-size: 12px; padding: 3px 9px; }
   .shop-wallet img { width: 19px; height: 19px; }
-  .shop-hint { font-size: 10.5px; padding: 5px 8px; }
-  .shop-body { flex-direction: column; }
+    .shop-body { flex-direction: column; }
   .shop-cats {
     width: 100%;
     flex-direction: row;
@@ -916,22 +969,22 @@ html, body {
     gap: 9px;
     padding: 10px;
   }
-  .shop-item { padding: 10px 8px 9px; border-radius: 13px; border-width: 2px; }
-  .shop-item-img { width: 60px; height: 60px; border-radius: 12px; }
-  .shop-item-img img { max-width: 46px; max-height: 46px; }
-  .shop-item-img .item-svg { width: 42px; height: 42px; }
-  .shop-item-name { font-size: 13px; margin-top: 6px; }
-  .shop-item-desc { font-size: 9.5px; min-height: 0; line-height: 1.6; }
-  .shop-item-have { font-size: 10px; margin-top: 3px; }
-  .shop-qty { margin-top: 6px; gap: 4px; }
-  .qty-btn { padding: 4px 8px; font-size: 11px; }
-  .shop-actions { flex-direction: column; gap: 5px; margin-top: 7px; }
+  .shop-item { padding: 8px 7px 9px; border-radius: 13px; border-width: 2px; border-top-width: 5px; }
+  .shop-info { width: 22px; height: 22px; font-size: 13px; top: 5px; left: 5px; }
+  .shop-item-img { width: 54px; height: 54px; border-radius: 12px; }
+  .shop-item-img img { max-width: 42px; max-height: 42px; }
+  .shop-item-img .item-svg { width: 38px; height: 38px; }
+  .shop-item-name { font-size: 12.5px; margin-top: 5px; }
+  .shop-qty { margin-top: 5px; gap: 4px; }
+  .qty-btn { padding: 3px 7px; font-size: 10.5px; }
+  .shop-actions { flex-direction: row; gap: 5px; margin-top: 6px; }
   .shop-actions .shop-buy, .shop-sell {
-    width: 100%;
-    font-size: 12.5px;
-    padding: 8px 4px;
-    border-radius: 10px;
+    font-size: 11px;
+    padding: 7px 2px;
+    border-radius: 9px;
+    gap: 3px;
   }
+  .shop-actions .shop-buy img, .shop-sell img { width: 15px; height: 15px; }
 
   /* پنل‌های دیگر */
   .panel-building { width: 94vw; }
@@ -943,5 +996,4 @@ html, body {
 
 @media (max-width: 380px) {
   .xp-wrap { display: none; } /* خیلی باریک: فقط نشان لول و پول‌ها بمانند */
-  .shop-item-desc { display: none; }
 }
