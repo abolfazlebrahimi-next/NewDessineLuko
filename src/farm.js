@@ -1,11 +1,11 @@
 // ================= منطق مزرعه: جایگاه‌ها، کاشت، رشد، فروش =================
-import * as THREE from 'three';
 import {
-  CROPS, PLOT_TEX, TIMING, LAYOUT, ITEMS,
+  CROPS, PLOT_TEX, TIMING, LAYOUT, ITEMS, REWARDS,
 } from './config.js';
 import {
-  state, getPlot, addPlot, isCellTaken, addCoins, addXp, addItem,
-  takeItem, spend, canAfford, save, removePlot,
+  state, getPlot, addPlot, isCellTaken, isCellBlocked, obstacleAtCell,
+  cellPosition as stateCellPosition,
+  addCoins, addXp, takeItem, save, removePlot,
 } from './state.js';
 import { sfx } from './audio.js';
 
@@ -13,21 +13,29 @@ export class Farm {
   constructor(world, ui) {
     this.world = world;
     this.ui = ui;
-    this.customers = [];   // مشتری‌های در حال فروش
+    this.characters = null;   // از main وصل می‌شود — مشتری‌ها از همین آدمک‌ها هستند
+    this.customerTimer = 2.5; // شمارش تا آمدن مشتری بعدی
     this.onPlotChange = null;
   }
 
   // ---------- ساخت بصری جایگاه‌ها ----------
   cellPosition(cell) {
-    const f = LAYOUT.field;
-    const col = cell % f.cols;
-    const row = Math.floor(cell / f.cols);
-    const x = f.cx + (col - (f.cols - 1) / 2) * f.spacing;
-    const z = f.cz + (row - (f.rows - 1) / 2) * f.spacing;
-    return { x, z };
+    return stateCellPosition(cell);
   }
 
-  // نزدیک‌ترین سلول آزاد مزرعه به یک نقطه (برای درگ‌اندراپ جایگاه)
+  // نزدیک‌ترین سلول زمین (بدون توجه به اشغال)
+  nearestCell(x, z) {
+    const f = LAYOUT.field;
+    let best = null, bestD = Infinity;
+    for (let cell = 0; cell < f.cols * f.rows; cell++) {
+      const cp = this.cellPosition(cell);
+      const d = (cp.x - x) ** 2 + (cp.z - z) ** 2;
+      if (d < bestD) { bestD = d; best = cell; }
+    }
+    return bestD <= 10 ? best : null;
+  }
+
+  // نزدیک‌ترین سلول آزاد و باز (بدون جایگاه و بدون درخت/سنگ) برای درگ‌اندراپ
   nearestFreeCell(x, z, selfPlotId = null) {
     const f = LAYOUT.field;
     let best = null, bestD = Infinity;
@@ -35,12 +43,20 @@ export class Farm {
       const cp = this.cellPosition(cell);
       const d = (cp.x - x) ** 2 + (cp.z - z) ** 2;
       if (d > 10) continue; // فقط نزدیک مزرعه
-      // سلول اشغالی؟ (به‌جز خود جایگاه در حال جابجایی)
+      if (isCellBlocked(cell)) continue; // اول باید درخت/سنگش پاک شود
       const taken = state.plots.some(p => p.cell === cell && p.id !== selfPlotId);
       if (taken) continue;
       if (d < bestD) { bestD = d; best = cell; }
     }
     return best;
+  }
+
+  // برای سایه‌ی سبز/قرمز هنگام انداختن کارت جایگاه
+  canPlacePlotAt(point) {
+    if (!point) return false;
+    const cell = this.nearestCell(point.x, point.z);
+    if (cell === null) return false;
+    return !isCellTaken(cell) && !isCellBlocked(cell);
   }
 
   spawnAllPlots() {
@@ -89,7 +105,6 @@ export class Farm {
       this.sellPlot(id, true);
       return;
     }
-    // نمایش اطلاعات
     let msg = '';
     if (p.state === 'empty') {
       msg = p.soilCount > 0
@@ -239,15 +254,35 @@ export class Farm {
       return false;
     }
     const f = LAYOUT.field;
-    // نزدیک‌ترین سلول خالی داخل مزرعه
+    // نزدیک‌ترین سلول و نزدیک‌ترین سلول آزادِ باز
+    let nearest = null, nearestD = Infinity;
     let best = null, bestD = Infinity;
     for (let cell = 0; cell < f.cols * f.rows; cell++) {
-      if (isCellTaken(cell)) continue;
       const { x, z } = this.cellPosition(cell);
       const d = (x - worldPoint.x) ** 2 + (z - worldPoint.z) ** 2;
+      if (d < nearestD) { nearestD = d; nearest = cell; }
+      if (isCellTaken(cell) || isCellBlocked(cell)) continue;
       if (d < bestD) { bestD = d; best = cell; }
     }
-    if (best === null || bestD > 36) {
+    if (nearest === null || nearestD > 36) {
+      this.ui.toast('کارت را داخل مزرعه و نزدیک‌تر جای خالی بینداز.');
+      sfx.error();
+      return false;
+    }
+    // کاربر کارت را روی زمینِ بسته انداخته
+    const blocker = obstacleAtCell(nearest);
+    if (blocker && nearestD <= bestD) {
+      const kindName = blocker.kind === 'tree' ? 'درخت' : 'سنگ';
+      this.ui.toast(`این زمین با ${kindName} بسته است! 🌳 اول روی آن کلیک کن و با سکه پاکش کن تا باز شود.`);
+      sfx.error();
+      return false;
+    }
+    if (best === null) {
+      this.ui.toast('همه‌ی زمین‌های باز پر شده‌اند! درخت/سنگ‌های بیشتری را با سکه پاک کن تا جا باز شود 🪓');
+      sfx.error();
+      return false;
+    }
+    if (bestD > 36) {
       this.ui.toast('کارت را داخل مزرعه و نزدیک‌تر جای خالی بینداز.');
       sfx.error();
       return false;
@@ -287,54 +322,58 @@ export class Farm {
             p.progress = 0;
             this.syncPlot(p.id);
             sfx.ready();
-            this.spawnCustomer(p.id);
+            this.ui.toast(`محصول رسید! ${crop.emoji} یک مشتری در راه مزرعه است… 🧺`);
           }
           save();
         }
       }
     }
 
-    // حرکت مشتری‌ها
-    for (const c of this.customers) {
-      if (c.state === 'walking') {
-        c.t = Math.min(1, c.t + dt / 1.8);
-        const k = easeOut(c.t);
-        const sp = this.world.getSprite(c.tag);
-        if (sp) {
-          sp.position.x = c.from.x + (c.to.x - c.from.x) * k;
-          sp.position.z = c.from.z + (c.to.z - c.from.z) * k;
-        }
-        if (c.t >= 1) {
-          c.state = 'waiting';
-          c.wait = 0;
-          const p = getPlot(c.plotId);
-          if (p) this.ui.showPlotLabel(c.plotId, c.to.x, c.to.z + 0.2, 'مشتری دست به نقد! 💰');
-        }
-      } else if (c.state === 'waiting') {
-        c.wait += dt;
-        if (c.wait >= TIMING.customerSellDelay) {
-          this.sellPlot(c.plotId, false);
-        }
-      }
+    // آمدن مشتری (از آدمک‌های شهر) برای محصولات رسیده
+    this.customerTimer -= dt;
+    if (this.customerTimer <= 0) {
+      this.customerTimer = 1;
+      this.maybeSendCustomer();
     }
-    this.customers = this.customers.filter(c => {
-      if (c.state !== 'done') return true;
-      this.world.removeSprite(c.tag);
-      return false;
-    });
   }
 
-  spawnCustomer(plotId) {
-    const p = getPlot(plotId);
-    if (!p) return;
-    if (this.customers.some(c => c.plotId === plotId && c.state !== 'done')) return;
-    const to = this.cellPosition(p.cell);
-    const from = { x: to.x + 2.2, z: to.z + 2.6 };
-    const tag = 'customer:' + plotId + ':' + Date.now();
-    this.world.addSprite({
-      tag, texture: makeCustomerTexture(), x: from.x, z: from.z, width: 1.15,
+  // یک آدمکِ مشتری می‌آید، چند محصول را نگاه می‌کند، شاید اولی را رد کند و بعدی را بخرد
+  maybeSendCustomer() {
+    if (!this.characters || !this.characters.ready || this.characters.customerActive) return;
+    const ready = state.plots.filter(p => p.state === 'ready');
+    if (!ready.length) return;
+
+    const shuffled = [...ready].sort(() => Math.random() - 0.5);
+    const chosen = [];
+    if (shuffled.length >= 2 && Math.random() < 0.85) {
+      // اولی را نمی‌پسندد، دومی را می‌خرد!
+      chosen.push({ plot: shuffled[0], decision: 'reject' });
+      chosen.push({ plot: shuffled[1], decision: 'buy' });
+    } else {
+      chosen.push({ plot: shuffled[0], decision: 'buy' });
+    }
+
+    const stops = chosen.map(({ plot, decision }) => {
+      const at = this.cellPosition(plot.cell);
+      const crop = CROPS[plot.crop];
+      return {
+        plotId: plot.id,
+        x: at.x, z: at.z + 1.55,   // جلوی جایگاه می‌ایستد
+        faceX: at.x, faceZ: at.z,   // رو به محصول
+        cropName: crop ? crop.name : 'محصول',
+        decision,
+      };
     });
-    this.customers.push({ plotId, tag, from, to, t: 0, state: 'walking', wait: 0 });
+
+    this.characters.requestCustomer({
+      stops,
+      isReady: (plotId) => {
+        const p = getPlot(plotId);
+        return !!p && p.state === 'ready';
+      },
+      onBuy: (plotId) => this.sellPlot(plotId, false),
+      onDone: () => { this.customerTimer = TIMING.customerGapSec; },
+    });
   }
 
   sellPlot(plotId, manual) {
@@ -343,12 +382,12 @@ export class Farm {
     const crop = CROPS[p.crop];
     const gain = crop.sell + Math.round(p.moisture * 1.5); // کیفیت بهتر = پول بیشتر
     addCoins(gain);
-    const leveled = addXp(40);
+    const leveled = addXp(REWARDS.cropXp);
     const { x, z } = this.cellPosition(p.cell);
     this.world.coinBurst(x, 0.8, z);
     sfx.coin();
     this.ui.toast(`فروخته شد! ${crop.name} → ${gain.toLocaleString('fa-IR')} سکه 💰`);
-    this.ui.floatText(x, z, `+${gain}`);
+    this.ui.floatText(x, z, `+${gain.toLocaleString('fa-IR')}`);
     this.ui.bumpCurrencies();
     if (leveled) this.ui.levelUp();
 
@@ -357,54 +396,7 @@ export class Farm {
     this.ui.hidePlotLabel(plotId);
     removePlot(plotId);
 
-    for (const c of this.customers) {
-      if (c.plotId === plotId && c.state !== 'done') {
-        c.state = 'done';
-      }
-    }
     save();
     this.ui.toast('کل جایگاه فروخته شد و از مزرعه پاک شد! 🌾');
   }
-}
-
-function easeOut(t) { return 1 - (1 - t) * (1 - t); }
-
-// ---------- بافت مشتری ----------
-let customerTex = null;
-function makeCustomerTexture() {
-  if (customerTex) return customerTex;
-  const c = document.createElement('canvas');
-  c.width = c.height = 128;
-  const ctx = c.getContext('2d');
-  // کلاه
-  ctx.fillStyle = '#e8a33d';
-  ctx.beginPath(); ctx.arc(64, 38, 22, 0, Math.PI * 2); ctx.fill();
-  ctx.fillRect(40, 38, 48, 10);
-  // صورت
-  ctx.fillStyle = '#f6c79a';
-  ctx.beginPath(); ctx.arc(64, 56, 17, 0, Math.PI * 2); ctx.fill();
-  // چشم‌ها
-  ctx.fillStyle = '#33261a';
-  ctx.beginPath(); ctx.arc(57, 54, 2.6, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(71, 54, 2.6, 0, Math.PI * 2); ctx.fill();
-  // لبخند
-  ctx.strokeStyle = '#b06a3c'; ctx.lineWidth = 2.4;
-  ctx.beginPath(); ctx.arc(64, 58, 7, 0.25 * Math.PI, 0.75 * Math.PI); ctx.stroke();
-  // بدن
-  ctx.fillStyle = '#5b8fd6';
-  ctx.beginPath();
-  ctx.moveTo(42, 118); ctx.quadraticCurveTo(42, 76, 64, 76);
-  ctx.quadraticCurveTo(86, 76, 86, 118); ctx.closePath(); ctx.fill();
-  // کیسه پول
-  ctx.fillStyle = '#e8b23d';
-  ctx.beginPath(); ctx.arc(92, 104, 13, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#a97b22';
-  ctx.beginPath(); ctx.arc(92, 94, 5, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#fff4c2';
-  ctx.font = 'bold 13px sans-serif';
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText('¢', 92, 106);
-  customerTex = new THREE.CanvasTexture(c);
-  customerTex.colorSpace = THREE.SRGBColorSpace;
-  return customerTex;
 }

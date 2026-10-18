@@ -1,6 +1,52 @@
 /* ================= شهر لوکو — استایل‌ها ================= */
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* ---------- فونت وزیرمتن (فایل‌ها در public/fonts) ---------- */
+@font-face {
+  font-family: 'Vazirmatn';
+  src: url('../fonts/Vazirmatn-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Vazirmatn';
+  src: url('../fonts/Vazirmatn-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Vazirmatn';
+  src: url('../fonts/Vazirmatn-SemiBold.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Vazirmatn';
+  src: url('../fonts/Vazirmatn-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Vazirmatn';
+  src: url('../fonts/Vazirmatn-ExtraBold.woff2') format('woff2');
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Vazirmatn';
+  src: url('../fonts/Vazirmatn-Black.woff2') format('woff2');
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+button, input, select, textarea { font-family: inherit; }
+
 :root {
   --gold: #f7c948;
   --gold-dark: #c98f2b;
@@ -19,7 +65,7 @@ html, body {
   width: 100%; height: 100%;
   overflow: hidden;
   background: #2c4a1e;
-  font-family: Vazirmatn, Tahoma, "Segoe UI", Arial, sans-serif;
+  font-family: 'Vazirmatn', Tahoma, "Segoe UI", Arial, sans-serif;
   user-select: none;
   -webkit-user-select: none;
   touch-action: none;
@@ -284,6 +330,50 @@ html, body {
   border-color: var(--wood);
 }
 
+/* برچسب قیمت پاک‌کردن درخت/سنگ */
+.plot-label.obstacle-price {
+  background: linear-gradient(#ffe08a, #f0b84e);
+  color: #4a2808;
+  border-color: var(--gold-dark);
+  font-size: 13.5px;
+  animation: bump .45s ease;
+}
+
+/* حباب حرف آدمک‌ها (گپ اهالی و مشتری) */
+.plot-label.chat-bubble {
+  background: #fffdf6;
+  color: #4a3220;
+  border: 2.5px solid var(--wood);
+  border-radius: 14px;
+  padding: 5px 11px;
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: normal;
+  text-align: center;
+  max-width: 190px;
+  line-height: 1.7;
+  box-shadow: 0 4px 10px rgba(0,0,0,.28);
+  z-index: 5;
+}
+.plot-label.chat-bubble::after {
+  /* دم حباب */
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -8px;
+  width: 12px; height: 12px;
+  background: #fffdf6;
+  border-right: 2.5px solid var(--wood);
+  border-bottom: 2.5px solid var(--wood);
+  transform: translateX(-50%) rotate(45deg);
+  border-bottom-right-radius: 3px;
+}
+.plot-label.chat-bubble.bubble-in { animation: bubbleIn .22s ease; }
+@keyframes bubbleIn {
+  0% { transform: translate(-50%, -100%) scale(.6); opacity: 0; }
+  100% { transform: translate(-50%, -100%) scale(1); opacity: 1; }
+}
+
 .float-text {
   position: absolute;
   transform: translate(-50%, -50%);
@@ -291,26 +381,6 @@ html, body {
   font-size: 22px; font-weight: 900;
   text-shadow: 0 2px 0 #2c7c3a, 0 4px 10px rgba(0,0,0,.45);
   pointer-events: none;
-}
-
-/* حلقه‌ی نگه‌داشتن */
-#hold-ring {
-  position: absolute;
-  width: 78px; height: 78px;
-  transform: translate(-50%, -50%);
-}
-#hold-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
-.hold-bg { fill: rgba(0,0,0,.25); stroke: rgba(255,255,255,.5); stroke-width: 7; }
-.hold-fg {
-  fill: none; stroke: #7ef08a; stroke-width: 8;
-  stroke-linecap: round;
-  transition: stroke-dashoffset .08s linear;
-}
-.hold-text {
-  position: absolute; inset: 0;
-  display: flex; align-items: center; justify-content: center;
-  color: #fff; font-size: 12px; font-weight: 900;
-  text-shadow: 0 1px 3px rgba(0,0,0,.6);
 }
 
 /* ================= توست ================= */

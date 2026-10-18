@@ -141,6 +141,46 @@ export class UI {
     if (el) el.style.display = 'none';
   }
 
+  removePlotLabel(plotId) {
+    const el = this.plotLabels.get(plotId);
+    if (el) {
+      el.remove();
+      this.plotLabels.delete(plotId);
+    }
+  }
+
+  // ---------- حباب حرف آدمک‌ها ----------
+  showBubble(id, x, z, text, y = 1.3) {
+    let el = this.plotLabels.get(id);
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'plot-label chat-bubble';
+      document.getElementById('labels').appendChild(el);
+      this.plotLabels.set(id, el);
+    }
+    el.textContent = text;
+    el.style.display = 'block';
+    el.dataset.wx = x;
+    el.dataset.wz = z;
+    el.dataset.wy = y;
+    // انیمیشن ظاهرشدن از اول پخش شود
+    el.classList.remove('bubble-in');
+    void el.offsetWidth;
+    el.classList.add('bubble-in');
+    this.positionLabel(el, x, z, y);
+  }
+
+  moveBubble(id, x, z) {
+    const el = this.plotLabels.get(id);
+    if (!el) return;
+    el.dataset.wx = x;
+    el.dataset.wz = z;
+  }
+
+  hideBubble(id) {
+    this.removePlotLabel(id);
+  }
+
   positionLabel(el, x, z, y = null) {
     const wy = y !== null ? y : (+el.dataset.wy || 1.9);
     const p = this.world.worldToScreen(x, wy, z);
@@ -177,40 +217,6 @@ export class UI {
       f.el.remove();
       return false;
     });
-  }
-
-  // حلقه‌ی نگه‌داشتن درخت
-  showHoldRing() {
-    if (!this.holdEl) {
-      this.holdEl = document.createElement('div');
-      this.holdEl.id = 'hold-ring';
-      this.holdEl.innerHTML = `
-        <svg viewBox="0 0 72 72">
-          <circle cx="36" cy="36" r="30" class="hold-bg"/>
-          <circle cx="36" cy="36" r="30" class="hold-fg" id="hold-fg"/>
-        </svg>
-        <div class="hold-text">نگه دار!</div>`;
-      document.getElementById('labels').appendChild(this.holdEl);
-    }
-    this.holdEl.style.display = 'block';
-    const fg = this.holdEl.querySelector('#hold-fg');
-    const circ = 2 * Math.PI * 30;
-    fg.style.strokeDasharray = circ;
-    fg.style.strokeDashoffset = circ;
-    this.holdCirc = circ;
-  }
-
-  updateHoldRing(k, x, z) {
-    if (!this.holdEl) return;
-    const fg = this.holdEl.querySelector('#hold-fg');
-    fg.style.strokeDashoffset = this.holdCirc * (1 - k);
-    const p = this.world.worldToScreen(x, 1.7, z);
-    this.holdEl.style.left = p.x + 'px';
-    this.holdEl.style.top = p.y + 'px';
-  }
-
-  hideHoldRing() {
-    if (this.holdEl) this.holdEl.style.display = 'none';
   }
 
   // ================= توست =================
@@ -348,7 +354,9 @@ export class UI {
         this.world.showPlacementGhost(mesh.position.x, mesh.position.z, 2.4, true);
         this.dropTarget = { plotId: mesh.userData.id.slice(5), point: null };
       } else if (itemId === 'plot' && ground) {
-        this.world.showPlacementGhost(ground.x, ground.z, 2.6, true);
+        // سبز فقط روی سلول باز زمین کشت؛ سلول بسته (درخت/سنگ) قرمز می‌شود
+        const ok = this.canPlacePlotAt ? this.canPlacePlotAt(ground) : true;
+        this.world.showPlacementGhost(ground.x, ground.z, 2.6, ok !== false);
         this.dropTarget = { plotId: null, point: ground };
       } else {
         this.world.hidePlacementGhost();
@@ -604,7 +612,7 @@ export class UI {
           <input type="checkbox" id="sound-toggle" ${state.sound ? 'checked' : ''}>
         </label>
         <button class="danger-btn" id="reset-btn">شروع دوباره‌ی بازی</button>
-        <div class="about">شهر لوکو 🌳 — نسخه‌ی ۱.۱</div>
+        <div class="about">شهر لوکو 🌳 — نسخه‌ی ۲.۰ (نقشه‌ی بزرگ، زمین‌های قابل پاک‌کردن، مشتری‌های واقعی)</div>
       </div>
     `, 'panel-settings');
     panel.querySelector('.modal-close').addEventListener('click', () => this.safe(() => this.closeModal()));
@@ -620,8 +628,9 @@ export class UI {
 
   // ---------- پنل ساختمان ----------
   openBuilding(building) {
-    const ready = buildingReady(building.id);
-    const left = cooldownLeft(building.id) / 1000;
+    const cd = building.action ? building.action.cooldown : 0;
+    const ready = buildingReady(building.id, cd);
+    const left = cooldownLeft(building.id, cd) / 1000;
     const btnHtml = building.action
       ? `<button class="building-action" id="building-action-btn" ${ready ? '' : 'disabled'}>
            ${ready ? building.action.label : `⏳ ${fmt(Math.ceil(left))} ثانیه`}
@@ -645,7 +654,7 @@ export class UI {
     const actBtn = panel.querySelector('#building-action-btn');
     if (actBtn) {
       actBtn.addEventListener('click', () => this.safe(() => {
-        if (!buildingReady(building.id)) return;
+        if (!buildingReady(building.id, cd)) return;
         const a = building.action;
         if (a.coins) addCoins(a.coins);
         if (a.dew) addDew(a.dew);
@@ -674,7 +683,7 @@ export class UI {
       const tick = setInterval(() => {
         try {
           if (!document.body.contains(panel)) { clearInterval(tick); return; }
-          const l = cooldownLeft(building.id) / 1000;
+          const l = cooldownLeft(building.id, cd) / 1000;
           const btn = panel.querySelector('#building-action-btn');
           if (btn) {
             if (l <= 0) {

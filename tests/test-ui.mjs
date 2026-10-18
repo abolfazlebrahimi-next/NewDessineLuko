@@ -42,8 +42,8 @@ const fakeWorld = {
   explode() {}, coinBurst() {},
 };
 
-const { UI } = await import('./src/ui.js');
-const { LAYOUT } = await import('./src/config.js');
+const { UI } = await import('../src/ui.js');
+const { LAYOUT } = await import('../src/config.js');
 
 console.log('--- ساخت UI ---');
 const ui = new UI(fakeWorld);

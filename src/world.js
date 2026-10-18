@@ -1,10 +1,10 @@
 // ================= جهان بازی با Three.js =================
 import * as THREE from 'three';
-import { ASSET } from './config.js';
+import { ASSET, MAP } from './config.js';
 
-const VIEW_HEIGHT = 13.2;      // ارتفاع دید ارتوگرافیک
+const VIEW_HEIGHT = 15.2;      // ارتفاع دید ارتوگرافیک (نقشه بزرگ‌تر شده)
 const CAM_POS = new THREE.Vector3(0, 13.5, 11.8);
-const CAM_TARGET = new THREE.Vector3(0, 0, 1.4);
+const CAM_TARGET = new THREE.Vector3(0, 0, 2.2);
 
 export class World {
   constructor(canvas) {
@@ -14,6 +14,12 @@ export class World {
     this.renderer.setClearColor(0x7ec850, 1);
 
     this.scene = new THREE.Scene();
+    // نور — برای مدل‌های سه‌بعدی (درخت/سنگ/آدمک) لازم است؛ اسپریت‌ها بی‌نیازند
+    this.scene.add(new THREE.HemisphereLight(0xeaf6ff, 0x4a7a34, 1.9));
+    const sun = new THREE.DirectionalLight(0xfff2d8, 1.6);
+    sun.position.set(6, 14, 7);
+    this.scene.add(sun);
+
     this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
     this.camera.position.copy(CAM_POS);
     this.camera.lookAt(CAM_TARGET);
@@ -52,7 +58,7 @@ export class World {
   _makeGround() {
     const grass = this.loader.load(ASSET('grass_tile.png'));
     grass.wrapS = grass.wrapT = THREE.RepeatWrapping;
-    grass.repeat.set(7, 5);
+    grass.repeat.set(9, 6);
     grass.colorSpace = THREE.SRGBColorSpace;
     const mat = new THREE.MeshBasicMaterial({ map: grass });
     this.ground = new THREE.Mesh(new THREE.PlaneGeometry(72, 46), mat);
@@ -75,8 +81,9 @@ export class World {
       map: patchTex, transparent: true, depthWrite: false,
     });
     for (const [x, z, s] of [
-      [0, -1.4, 11], [-9, -2.4, 7], [9, -2.4, 7], [-8.2, 3.6, 6.5], [8.2, 3.8, 6.5],
-      [-0.2, 5.8, 13],
+      [0, -3.0, 11], [-10.5, -3.4, 7], [10.5, -3.4, 7], [-10.8, 1.4, 6.5], [10.8, 1.4, 6.5],
+      [0, 1.4, 15],   // میدان وسط شهر
+      [0, 9.2, 21],   // زمین کشت بزرگ جنوب شهر
     ]) {
       const patch = new THREE.Mesh(new THREE.PlaneGeometry(s, s), this.patchMat);
       patch.rotation.x = -Math.PI / 2;
@@ -355,19 +362,20 @@ export class World {
     right.crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize().negate();
     this.panTarget.addScaledVector(right, dx * worldPerPixel);
     this.panTarget.addScaledVector(fwd, -dy * worldPerPixel * 1.35);
-    this.panTarget.x = THREE.MathUtils.clamp(this.panTarget.x, -7, 7);
-    this.panTarget.z = THREE.MathUtils.clamp(this.panTarget.z, -2.5, 5.5);
+    this.panTarget.x = THREE.MathUtils.clamp(this.panTarget.x, MAP.panMinX, MAP.panMaxX);
+    this.panTarget.z = THREE.MathUtils.clamp(this.panTarget.z, MAP.panMinZ, MAP.panMaxZ);
   }
 
   zoomBy(delta) {
-    this.zoom = THREE.MathUtils.clamp(this.zoom * (delta > 0 ? 0.92 : 1.08), 0.85, 1.5);
+    // زوم‌اوت بیشتر برای دیدن کل نقشه‌ی بزرگ
+    this.zoom = THREE.MathUtils.clamp(this.zoom * (delta > 0 ? 0.92 : 1.08), 0.5, 1.7);
   }
 
   focusOn(x, z, zoom = 1.18) {
     this.panTarget.set(
-      THREE.MathUtils.clamp(x, -7, 7),
+      THREE.MathUtils.clamp(x, MAP.panMinX, MAP.panMaxX),
       0,
-      THREE.MathUtils.clamp(z - 1.2, -2.5, 5.5)
+      THREE.MathUtils.clamp(z - 1.2, MAP.panMinZ, MAP.panMaxZ)
     );
     this.zoom = zoom;
   }
@@ -410,7 +418,7 @@ export class World {
         const k = 1.07 + Math.sin(sp.userData.hoverT * 12) * 0.03;
         sp.scale.set(base.x * k, base.y * k, 1);
         sp.material.rotation = Math.sin(sp.userData.hoverT * 16) * 0.09;
-      } else if (sp.userData.type === 'tree') {
+      } else if (sp.userData.type === 'tree' || sp.userData.sway) {
         // تکان طبیعی درخت‌ها در حالت عادی
         const phase = (sp.userData.swayPhase = sp.userData.swayPhase ?? Math.random() * Math.PI * 2);
         sp.material.rotation = Math.sin(t * 1.4 + phase) * 0.028;
