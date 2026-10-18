@@ -36,6 +36,7 @@ export const state = {
   inventory: { ...START.inventory },
   plots: starterPlots(),
   trees: starterTrees(),
+  buildingPos: {},        // id -> {x, z} موقعیت سفارشی ساختمان‌ها
   cooldowns: {},          // buildingId -> timestamp
   sound: true,
   mails: [
@@ -59,17 +60,18 @@ export function save() {
   saveTimer = setTimeout(() => {
     try {
       localStorage.setItem(KEY, JSON.stringify({
-        coins: state.coins,
-        dew: state.dew,
-        level: state.level,
-        xp: state.xp,
-        inventory: state.inventory,
-        plots: state.plots,
-        trees: state.trees,
-        cooldowns: state.cooldowns,
-        sound: state.sound,
-        mails: state.mails,
-      }));
+      coins: state.coins,
+      dew: state.dew,
+      level: state.level,
+      xp: state.xp,
+      inventory: state.inventory,
+      plots: state.plots,
+      trees: state.trees,
+      buildingPos: state.buildingPos,
+      cooldowns: state.cooldowns,
+      sound: state.sound,
+      mails: state.mails,
+    }));
     } catch (e) { /* بی‌خیال */ }
   }, 250);
 }
@@ -91,6 +93,7 @@ export function load() {
     if (Array.isArray(data.plots) && data.plots.length) state.plots = data.plots;
     if (Array.isArray(data.trees)) state.trees = data.trees;
     if (Array.isArray(data.mails)) state.mails = data.mails;
+    if (data.buildingPos && typeof data.buildingPos === 'object') state.buildingPos = data.buildingPos;
     // اطمینان از حداقل رطوبت و زمان‌ها
     state.plots.forEach(p => {
       if (typeof p.moisture !== 'number') p.moisture = 70;
@@ -177,6 +180,39 @@ export function addPlot(cell) {
 
 export function isCellTaken(cell) {
   return state.plots.some(p => p.cell === cell);
+}
+
+export function removePlot(id) {
+  state.plots = state.plots.filter(p => p.id !== id);
+  save();
+}
+
+export function setPlotCell(id, cell) {
+  const p = getPlot(id);
+  if (!p) return false;
+  p.cell = cell;
+  save();
+  return true;
+}
+
+// ---------- جابجایی اشیاء (درگ‌اندراپ) ----------
+export function setBuildingPos(id, x, z) {
+  state.buildingPos[id] = { x, z };
+  save();
+}
+
+export function getBuildingPos(id, fallbackX, fallbackZ) {
+  const p = state.buildingPos[id];
+  return p ? { x: p.x, z: p.z } : { x: fallbackX, z: fallbackZ };
+}
+
+export function setTreePos(id, x, z) {
+  const t = state.trees.find(t => t.id === id);
+  if (!t) return false;
+  t.x = x;
+  t.z = z;
+  save();
+  return true;
 }
 
 // ---------- درخت‌ها ----------

@@ -5,7 +5,7 @@ import {
 } from './config.js';
 import {
   state, getPlot, addPlot, isCellTaken, addCoins, addXp, addItem,
-  takeItem, spend, canAfford, save,
+  takeItem, spend, canAfford, save, removePlot,
 } from './state.js';
 import { sfx } from './audio.js';
 
@@ -25,6 +25,22 @@ export class Farm {
     const x = f.cx + (col - (f.cols - 1) / 2) * f.spacing;
     const z = f.cz + (row - (f.rows - 1) / 2) * f.spacing;
     return { x, z };
+  }
+
+  // نزدیک‌ترین سلول آزاد مزرعه به یک نقطه (برای درگ‌اندراپ جایگاه)
+  nearestFreeCell(x, z, selfPlotId = null) {
+    const f = LAYOUT.field;
+    let best = null, bestD = Infinity;
+    for (let cell = 0; cell < f.cols * f.rows; cell++) {
+      const cp = this.cellPosition(cell);
+      const d = (cp.x - x) ** 2 + (cp.z - z) ** 2;
+      if (d > 10) continue; // فقط نزدیک مزرعه
+      // سلول اشغالی؟ (به‌جز خود جایگاه در حال جابجایی)
+      const taken = state.plots.some(p => p.cell === cell && p.id !== selfPlotId);
+      if (taken) continue;
+      if (d < bestD) { bestD = d; best = cell; }
+    }
+    return best;
   }
 
   spawnAllPlots() {
@@ -315,7 +331,7 @@ export class Farm {
     const to = this.cellPosition(p.cell);
     const from = { x: to.x + 2.2, z: to.z + 2.6 };
     const tag = 'customer:' + plotId + ':' + Date.now();
-    const sp = this.world.addSprite({
+    this.world.addSprite({
       tag, texture: makeCustomerTexture(), x: from.x, z: from.z, width: 1.15,
     });
     this.customers.push({ plotId, tag, from, to, t: 0, state: 'walking', wait: 0 });
@@ -336,23 +352,18 @@ export class Farm {
     this.ui.bumpCurrencies();
     if (leveled) this.ui.levelUp();
 
-    // جایگاه خالی می‌شود
-    p.state = 'empty';
-    p.soilCount = 0;
-    p.crop = null;
-    p.phase = 0;
-    p.progress = 0;
-    p.moisture = 60;
-    p.fertilized = false;
-    this.syncPlot(p.id);
+    // ✅ کل جایگاه فروخته می‌شود و از مزرعه پاک می‌شود (طبق خواسته‌ی کاربر)
+    this.world.removeSprite(this.plotTag(plotId));
+    this.ui.hidePlotLabel(plotId);
+    removePlot(plotId);
 
     for (const c of this.customers) {
       if (c.plotId === plotId && c.state !== 'done') {
         c.state = 'done';
-        this.ui.hidePlotLabel(plotId);
       }
     }
     save();
+    this.ui.toast('کل جایگاه فروخته شد و از مزرعه پاک شد! 🌾');
   }
 }
 
