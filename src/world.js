@@ -29,6 +29,7 @@ export class World {
     this._makeGround();
     this._makeShadowTexture();
     this._makeRingTexture();
+    this._makeGhostTexture();
     this._makeParticleTexture();
 
     this.raycaster = new THREE.Raycaster();
@@ -108,6 +109,25 @@ export class World {
     ctx.arc(64, 64, 52, 0, Math.PI * 2);
     ctx.stroke();
     this.ringTex = new THREE.CanvasTexture(c);
+  }
+
+  _makeGhostTexture() {
+    // سایه/پد جانمایی مربعی گرد مثل کلش
+    const c = document.createElement('canvas');
+    c.width = c.height = 128;
+    const ctx = c.getContext('2d');
+    const g = ctx.createRadialGradient(64, 64, 8, 64, 64, 60);
+    g.addColorStop(0, 'rgba(255,255,255,0.55)');
+    g.addColorStop(0.75, 'rgba(255,255,255,0.28)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 128, 128);
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.arc(64, 64, 54, 0, Math.PI * 2);
+    ctx.stroke();
+    this.ghostTex = new THREE.CanvasTexture(c);
   }
 
   _makeParticleTexture() {
@@ -200,6 +220,50 @@ export class World {
 
   hideHighlight() {
     if (this.highlight) this.highlight.visible = false;
+  }
+
+  // ---------- سایه/پد جانمایی هنگام درگ‌اندراپ ----------
+  showPlacementGhost(x, z, size, valid) {
+    if (!this.placementGhost) {
+      const mat = new THREE.MeshBasicMaterial({
+        map: this.ghostTex, transparent: true, depthWrite: false, depthTest: false,
+      });
+      this.placementGhost = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
+      this.placementGhost.rotation.x = -Math.PI / 2;
+      this.placementGhost.renderOrder = 2600;
+      this.scene.add(this.placementGhost);
+    }
+    this.placementGhost.visible = true;
+    this.placementGhost.position.set(x, 0.06, z);
+    this.placementGhost.scale.set(size, size * 0.72, 1);
+    this.placementGhost.material.color.setHex(valid ? 0x62e57a : 0xff5b52);
+    this.placementGhost.material.opacity = 0.85;
+  }
+
+  hidePlacementGhost() {
+    if (this.placementGhost) this.placementGhost.visible = false;
+  }
+
+  // ---------- افکت هاور / لمس ----------
+  hoverSprite(tag, on) {
+    const sp = this.getSprite(tag);
+    if (!sp) return;
+    const base = sp.userData.baseScale;
+    if (on) {
+      sp.userData.hoverT = 0;
+      sp.userData.hovering = true;
+    } else if (sp.userData) {
+      sp.userData.hovering = false;
+      sp.scale.copy(base);
+      sp.material.rotation = 0;
+    }
+  }
+
+  shakeSprite(tag, strength = 1) {
+    const sp = this.getSprite(tag);
+    if (!sp) return;
+    sp.userData.shakeT = 0;
+    sp.userData.shakeS = strength;
   }
 
   // ---------- افکت‌ها ----------
@@ -334,6 +398,35 @@ export class World {
   }
 
   update(dt) {
+    // تکان ملایم و هاور اسپریت‌ها (درخت‌ها و...)
+    const t = performance.now() / 1000;
+    for (const sp of this.clickables) {
+      if (!sp.userData) continue;
+      const base = sp.userData.baseScale;
+      if (!base) continue;
+      if (sp.userData.hovering) {
+        // بزرگ‌نمایی ملایم + تکان هنگام هاور/لمس
+        sp.userData.hoverT = (sp.userData.hoverT || 0) + dt;
+        const k = 1.07 + Math.sin(sp.userData.hoverT * 12) * 0.03;
+        sp.scale.set(base.x * k, base.y * k, 1);
+        sp.material.rotation = Math.sin(sp.userData.hoverT * 16) * 0.09;
+      } else if (sp.userData.type === 'tree') {
+        // تکان طبیعی درخت‌ها در حالت عادی
+        const phase = (sp.userData.swayPhase = sp.userData.swayPhase ?? Math.random() * Math.PI * 2);
+        sp.material.rotation = Math.sin(t * 1.4 + phase) * 0.028;
+      }
+      if (sp.userData.shakeT !== undefined) {
+        sp.userData.shakeT += dt;
+        const st = sp.userData.shakeT;
+        if (st < 0.55) {
+          sp.material.rotation = Math.sin(st * 34) * 0.16 * (1 - st / 0.55) * (sp.userData.shakeS || 1);
+        } else {
+          delete sp.userData.shakeT;
+          sp.material.rotation = 0;
+        }
+      }
+    }
+
     // انیمیشن افکت‌ها
     for (const fx of this.effects) {
       fx.age += dt;

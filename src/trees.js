@@ -1,6 +1,6 @@
 // ================= درخت‌ها: رشد تصادفی + ترکاندن با نگه‌داشتن =================
 import { TIMING, LAYOUT, REWARDS } from './config.js';
-import { state, addTree, removeTree, addDew, addXp, save } from './state.js';
+import { state, addTree, removeTree, addDew, addXp, save, setTreePos } from './state.js';
 import { sfx } from './audio.js';
 
 const TREE_FILES = ['Tree1.png', 'Tree2.png', 'Tree3.png'];
@@ -11,6 +11,7 @@ export class Trees {
     this.ui = ui;
     this.spawnTimer = 0;
     this.hold = null; // { id, start, x, z }
+    this.hovered = null;
   }
 
   spawnAll() {
@@ -34,6 +35,42 @@ export class Trees {
     if (!mesh || mesh.userData.type !== 'tree') return null;
     const id = mesh.userData.id.slice(5);
     return state.trees.find(t => t.id === id) || null;
+  }
+
+  // ---------- بازخورد هاور / لمس ----------
+  setHover(tree, on) {
+    if (!tree) return;
+    const tag = 'tree:' + tree.id;
+    if (on) {
+      if (this.hovered !== tag) {
+        this.clearHover();
+        this.hovered = tag;
+        this.world.hoverSprite(tag, true);
+        sfx.pop();
+      }
+    } else if (this.hovered === tag) {
+      this.clearHover();
+    }
+  }
+
+  clearHover() {
+    if (this.hovered) {
+      this.world.hoverSprite(this.hovered, false);
+      this.hovered = null;
+    }
+  }
+
+  // جابجایی درخت با درگ‌اندراپ
+  moveTree(tree, x, z) {
+    if (!tree) return false;
+    setTreePos(tree.id, x, z);
+    const sp = this.world.getSprite('tree:' + tree.id);
+    if (sp) {
+      sp.position.x = x;
+      sp.position.z = z;
+      if (sp.userData.shadow) sp.userData.shadow.position.set(x, 0.03, z + 0.25);
+    }
+    return true;
   }
 
   // ---------- نگه‌داشتن برای ترکاندن ----------
@@ -72,7 +109,6 @@ export class Trees {
     this.world.explode(tree.x, 1.2, tree.z, 0x8fe07a);
     this.world.removeSprite(tag);
     removeTree(tree.id);
-
     const dew = REWARDS.treeDew[0] + Math.floor(Math.random() * (REWARDS.treeDew[1] - REWARDS.treeDew[0] + 1));
     addDew(dew);
     const leveled = addXp(REWARDS.treeXp);
