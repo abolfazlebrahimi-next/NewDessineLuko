@@ -1,30 +1,42 @@
 // ================= جهان بازی با Three.js =================
 import * as THREE from 'three';
-import { ASSET } from './config.js';
+import { ASSET, AREAS, MAP_BOUNDS } from './config.js';
+import { sharedManager } from './loader.js';
 
-const VIEW_HEIGHT = 13.2;      // ارتفاع دید ارتوگرافیک
+const VIEW_HEIGHT = 18.5;      // ارتفاع دید ارتوگرافیک
 const CAM_POS = new THREE.Vector3(0, 13.5, 11.8);
-const CAM_TARGET = new THREE.Vector3(0, 0, 1.4);
+const CAM_TARGET = new THREE.Vector3(0, 0, 0);
+// زوم متعادل: نه خیلی نزدیک، نه خیلی دور — همیشه بشود مدیریت کرد
+const ZOOM_MIN = 0.36;
+const ZOOM_MAX = 1.6;
 
 export class World {
   constructor(canvas) {
     this.canvas = canvas;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    const isTouch = 'ontouchstart' in window || (window.matchMedia && matchMedia('(pointer: coarse)').matches);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isTouch ? 1.6 : 2));
     this.renderer.setClearColor(0x7ec850, 1);
 
     this.scene = new THREE.Scene();
+    // نور — برای مدل‌های سه‌بعدی (درخت/سنگ/آدمک) لازم است؛ اسپریت‌ها بی‌نیازند
+    this.scene.add(new THREE.HemisphereLight(0xeaf6ff, 0x4a7a34, 1.9));
+    const sun = new THREE.DirectionalLight(0xfff2d8, 1.6);
+    sun.position.set(6, 14, 7);
+    this.scene.add(sun);
+
     this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
     this.camera.position.copy(CAM_POS);
     this.camera.lookAt(CAM_TARGET);
 
-    this.loader = new THREE.TextureLoader();
+    this.loader = new THREE.TextureLoader(sharedManager);
     this.texCache = new Map();
     this.clickables = [];        // برای ری‌کست
     this.byTag = new Map();      // tag -> mesh
     this.effects = [];           // انیمیشن‌های فعال
     this.panTarget = new THREE.Vector3().copy(CAM_TARGET);
     this.zoom = 1;
+    this.area = AREAS.town;      // صحنه‌ی فعلی: شهر یا مزرعه
 
     this._makeGround();
     this._makeShadowTexture();
@@ -36,6 +48,7 @@ export class World {
     this.pointerNdc = new THREE.Vector2();
 
     window.addEventListener('resize', () => this.resize());
+    if (window.visualViewport) visualViewport.addEventListener('resize', () => this.resize());
     this.resize();
   }
 
@@ -52,12 +65,13 @@ export class World {
   _makeGround() {
     const grass = this.loader.load(ASSET('grass_tile.png'));
     grass.wrapS = grass.wrapT = THREE.RepeatWrapping;
-    grass.repeat.set(7, 5);
+    grass.repeat.set(30, 30);
     grass.colorSpace = THREE.SRGBColorSpace;
     const mat = new THREE.MeshBasicMaterial({ map: grass });
-    this.ground = new THREE.Mesh(new THREE.PlaneGeometry(72, 46), mat);
+    // زمین بزرگ چمنی که شهر رویش ساخته می‌شود
+    this.ground = new THREE.Mesh(new THREE.PlaneGeometry(260, 260), mat);
     this.ground.rotation.x = -Math.PI / 2;
-    this.ground.position.set(0, 0, 1);
+    this.ground.position.set(0, 0, 0);
     this.ground.renderOrder = -1000;
     this.scene.add(this.ground);
 
@@ -74,16 +88,7 @@ export class World {
     this.patchMat = new THREE.MeshBasicMaterial({
       map: patchTex, transparent: true, depthWrite: false,
     });
-    for (const [x, z, s] of [
-      [0, -1.4, 11], [-9, -2.4, 7], [9, -2.4, 7], [-8.2, 3.6, 6.5], [8.2, 3.8, 6.5],
-      [-0.2, 5.8, 13],
-    ]) {
-      const patch = new THREE.Mesh(new THREE.PlaneGeometry(s, s), this.patchMat);
-      patch.rotation.x = -Math.PI / 2;
-      patch.position.set(x, 0.01, z);
-      patch.renderOrder = -999;
-      this.scene.add(patch);
-    }
+    // (شهر خودش کف‌پوش و خیابان دارد)
   }
 
   _makeShadowTexture() {
@@ -146,13 +151,22 @@ export class World {
   /**
    * اسپریت ایستاده روی زمین (ساختمان/درخت/جایگاه)
    */
-  addSprite({ tag, file, texture = null, x, z, width, y = 0, clickable = true, anchorBottom = true }) {
+  addSprite({ tag, file, texture = null, x, z, width, y = 0, clickable = true, anchorBottom = true, depthTest = false }) {
     const tex = texture || this.texture(file);
     const mat = new THREE.SpriteMaterial({
-      map: tex, transparent: true, depthTest: false, depthWrite: false,
+      map: tex, transparent: true, depthTest, depthWrite: false,
     });
     const sp = new THREE.Sprite(mat);
     const aspect = tex.image && tex.image.width ? tex.image.width / tex.image.height : 1.5;
+    // اگر عکس هنوز لود نشده، وقتی آمد نسبت ابعاد واقعی را اعمال کن
+    if (tex.image && !tex.image.width && tex.image.addEventListener) {
+      tex.image.addEventListener('load', () => {
+        const a = tex.image.width / tex.image.height;
+        sp.scale.y = sp.scale.x / a;
+        sp.userData.aspect = a;
+        sp.userData.baseScale.copy(sp.scale);
+      }, { once: true });
+    }
     const h = width / aspect;
     sp.scale.set(width, h, 1);
     sp.center.set(0.5, anchorBottom ? 0 : 0.5);
@@ -240,6 +254,12 @@ export class World {
     this.placementGhost.material.opacity = 0.85;
   }
 
+  // پد جانمایی مستطیلی (برای درگ گروهی دیوارها/حصارها)
+  showPlacementGhostRect(x, z, w, d, valid) {
+    this.showPlacementGhost(x, z, w, valid);
+    if (this.placementGhost) this.placementGhost.scale.set(w, d, 1);
+  }
+
   hidePlacementGhost() {
     if (this.placementGhost) this.placementGhost.visible = false;
   }
@@ -324,6 +344,17 @@ export class World {
     return hits.length ? hits[0].object : null;
   }
 
+  // ری‌کست روی مش‌های اینستنس‌شده‌ی جنگل (برای پاک‌کردن درخت/سنگ/علف با کلیک)
+  pickInstanced(objects, clientX, clientY) {
+    if (!objects || !objects.length) return null;
+    const rect = this.canvas.getBoundingClientRect();
+    this.pointerNdc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    this.pointerNdc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    this.raycaster.setFromCamera(this.pointerNdc, this.camera);
+    const hits = this.raycaster.intersectObjects(objects, false);
+    return hits.length ? hits[0] : null;
+  }
+
   pickGround(clientX, clientY) {
     const rect = this.canvas.getBoundingClientRect();
     this.pointerNdc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
@@ -354,22 +385,41 @@ export class World {
     fwd.normalize();
     right.crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize().negate();
     this.panTarget.addScaledVector(right, dx * worldPerPixel);
-    this.panTarget.addScaledVector(fwd, -dy * worldPerPixel * 1.35);
-    this.panTarget.x = THREE.MathUtils.clamp(this.panTarget.x, -7, 7);
-    this.panTarget.z = THREE.MathUtils.clamp(this.panTarget.z, -2.5, 5.5);
+    // نقشه زیر انگشت حرکت می‌کند: انگشت بالا → نقشه بالا می‌رود (جهت طبیعی لمسی)
+    this.panTarget.addScaledVector(fwd, dy * worldPerPixel * 1.35);
+    // دوربین روی کل نقشه آزاد است: با کشیدن می‌توانی از شهر تا مزرعه بروی
+    const B = MAP_BOUNDS;
+    this.panTarget.x = THREE.MathUtils.clamp(this.panTarget.x, B.panMinX, B.panMaxX);
+    this.panTarget.z = THREE.MathUtils.clamp(this.panTarget.z, B.panMinZ, B.panMaxZ);
   }
 
   zoomBy(delta) {
-    this.zoom = THREE.MathUtils.clamp(this.zoom * (delta > 0 ? 0.92 : 1.08), 0.85, 1.5);
+    // زوم متعادل و قابل مدیریت
+    this.zoom = THREE.MathUtils.clamp(this.zoom * (delta > 0 ? 0.93 : 1.07), ZOOM_MIN, ZOOM_MAX);
   }
 
-  focusOn(x, z, zoom = 1.18) {
+  // زوم لمسی (پینچ با دو انگشت روی موبایل)
+  zoomTo(z) {
+    this.zoom = THREE.MathUtils.clamp(z, ZOOM_MIN, ZOOM_MAX);
+  }
+
+  focusOn(x, z, zoom = 1.15) {
+    const B = MAP_BOUNDS;
     this.panTarget.set(
-      THREE.MathUtils.clamp(x, -7, 7),
+      THREE.MathUtils.clamp(x, B.panMinX, B.panMaxX),
       0,
-      THREE.MathUtils.clamp(z - 1.2, -2.5, 5.5)
+      THREE.MathUtils.clamp(z - 1.2, B.panMinZ, B.panMaxZ)
     );
-    this.zoom = zoom;
+    this.zoom = THREE.MathUtils.clamp(zoom, ZOOM_MIN, ZOOM_MAX);
+  }
+
+  // تعویض صحنه (زیر ابرها صدا زده می‌شود): دوربین یک‌جا به صحنه‌ی جدید می‌پرد
+  setArea(areaKey) {
+    this.area = AREAS[areaKey] || AREAS.town;
+    const f = this.area.focus;
+    this.panTarget.set(f.x, 0, f.z);
+    this.zoom = THREE.MathUtils.clamp(f.zoom, ZOOM_MIN, ZOOM_MAX);
+    this._updateCamera();
   }
 
   // ---------- حلقه‌ی رندر ----------
@@ -410,7 +460,7 @@ export class World {
         const k = 1.07 + Math.sin(sp.userData.hoverT * 12) * 0.03;
         sp.scale.set(base.x * k, base.y * k, 1);
         sp.material.rotation = Math.sin(sp.userData.hoverT * 16) * 0.09;
-      } else if (sp.userData.type === 'tree') {
+      } else if (sp.userData.type === 'tree' || sp.userData.sway) {
         // تکان طبیعی درخت‌ها در حالت عادی
         const phase = (sp.userData.swayPhase = sp.userData.swayPhase ?? Math.random() * Math.PI * 2);
         sp.material.rotation = Math.sin(t * 1.4 + phase) * 0.028;

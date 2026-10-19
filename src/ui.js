@@ -1,9 +1,21 @@
 // ================= رابط کاربری: HUD، فروشگاه کلش‌مانند، کارت‌ها =================
-import { state, addCoins, addDew, addXp, resetGame, save, buildingReady, setBuildingCooldown, cooldownLeft } from './state.js';
-import { LAYOUT, ASSET, ITEMS, TRAY_ORDER, CATEGORIES, CROPS, PRICES, BUY_STEPS, xpForLevel } from './config.js';
+import { state, addCoins, addDew, addXp, resetGame, save, buildingReady, setBuildingCooldown, cooldownLeft, spend, canAfford } from './state.js';
+import { LAYOUT, ASSET, ITEMS, TRAY_ORDER, CATEGORIES, CROPS, PRICES, BUY_STEPS, xpForLevel, isGroundItem, TEST_MODE, ITEM_SELL_RATIO } from './config.js';
 import { sfx } from './audio.js';
 
 const fmt = (n) => Math.round(n).toLocaleString('fa-IR');
+// در حالت تست، موجودی بی‌نهایت نمایش داده می‌شود
+const fmtMoney = (currency) => TEST_MODE.infiniteMoney
+  ? '∞'
+  : fmt(currency === 'dew' ? state.dew : state.coins);
+
+// آیکون‌های برداری (SVG) سازه‌ها — بدون استیکر/ایموجی
+const ITEM_SVG = {
+  fence: `<svg class="item-svg" viewBox="0 0 48 48"><g fill="#a06a35"><rect x="6" y="10" width="5" height="30" rx="1.5"/><rect x="21.5" y="10" width="5" height="30" rx="1.5"/><rect x="37" y="10" width="5" height="30" rx="1.5"/></g><g fill="#c08347"><rect x="3" y="16.5" width="42" height="4.6" rx="2"/><rect x="3" y="28.5" width="42" height="4.6" rx="2"/></g></svg>`,
+  wall: `<svg class="item-svg" viewBox="0 0 48 48"><g fill="#b3573e" stroke="#7e3524" stroke-width="1.6"><rect x="4" y="9" width="19" height="9" rx="1.5"/><rect x="25" y="9" width="19" height="9" rx="1.5"/><rect x="4" y="30" width="19" height="9" rx="1.5"/><rect x="25" y="30" width="19" height="9" rx="1.5"/></g><rect x="14.5" y="19.5" width="19" height="9" rx="1.5" fill="#c9664d" stroke="#7e3524" stroke-width="1.6"/><rect x="4" y="19.5" width="8.5" height="9" rx="1.5" fill="#c9664d" stroke="#7e3524" stroke-width="1.6"/><rect x="35.5" y="19.5" width="8.5" height="9" rx="1.5" fill="#c9664d" stroke="#7e3524" stroke-width="1.6"/></svg>`,
+  tent: `<svg class="item-svg" viewBox="0 0 48 48"><polygon points="24,7 44,40 4,40" fill="#e0ac4e"/><polygon points="24,7 44,40 24,40" fill="#c98f2b"/><polygon points="24,22 31,40 17,40" fill="#6e4517"/><line x1="24" y1="7" x2="24" y2="3.5" stroke="#6e4517" stroke-width="2.4"/></svg>`,
+  house: `<svg class="item-svg" viewBox="0 0 48 48"><rect x="11" y="22" width="26" height="19" fill="#dbb98a" stroke="#8a5a2b" stroke-width="2"/><polygon points="24,6 43,23 5,23" fill="#a8542f"/><rect x="20.5" y="30" width="7" height="11" fill="#6e4517"/><rect x="14" y="27" width="5" height="5" fill="#aee1ff"/><rect x="29" y="27" width="5" height="5" fill="#aee1ff"/></svg>`,
+};
 
 // آیکون‌های SVG برای دکمه‌های HUD
 const SVG = {
@@ -26,37 +38,45 @@ export class UI {
 
   // ================= HUD =================
   buildHud() {
-    // بالا چپ: لول + نوار تجربه
+    // بالا چپ (سبک کلش): قاب پروفایل + نشان لول رویش + اسم و نوار تجربه‌ی باریک
     const tl = document.createElement('div');
     tl.id = 'hud-topleft';
     tl.innerHTML = `
-      <div class="level-badge" id="level-badge"><span id="level-num">۱</span></div>
-      <div class="xp-wrap">
-        <div class="xp-bar"><div class="xp-fill" id="xp-fill"></div></div>
-        <div class="xp-text" id="xp-text">0 / 500 XP</div>
+      <div class="profile-frame">
+        <img class="profile-img" src="${ASSET('AmusementPark.png')}" alt="" draggable="false">
+        <div class="level-badge" id="level-badge"><span id="level-num">۱</span></div>
+      </div>
+      <div class="profile-info">
+        <div class="profile-name">شهر لوکو</div>
+        <div class="xp-wrap">
+          <div class="xp-bar"><div class="xp-fill" id="xp-fill"></div></div>
+          <div class="xp-text" id="xp-text">0 / 500 XP</div>
+        </div>
       </div>`;
     document.getElementById('overlay').appendChild(tl);
 
-    // بالا راست: تنظیمات + سکه + شبنم
+    // بالا راست: نوارهای منابع به سبک کلش (آیکون لبه‌ی نوار + عدد درشت + دکمه‌ی ＋)
     const tr = document.createElement('div');
     tr.id = 'hud-topright';
     tr.innerHTML = `
-      <button class="hud-icon-btn" id="btn-settings" title="تنظیمات">${SVG.gear}</button>
-      <div class="currency-row" id="coins-row">
-        <img src="${ASSET('coin.png')}" alt="سکه">
-        <span id="coins-val">${fmt(state.coins)}</span>
+      <div class="res-bar" id="coins-row">
+        <span class="res-ico"><img src="${ASSET('coin.png')}" alt="سکه"></span>
+        <span class="res-val" id="coins-val">${fmt(state.coins)}</span>
+        <button class="res-plus" id="coins-plus" aria-label="فروشگاه">+</button>
       </div>
-      <div class="currency-row dew" id="dew-row">
-        <img src="${ASSET('Dew.png')}" alt="شبنم">
-        <span id="dew-val">${fmt(state.dew)}</span>
+      <div class="res-bar dew" id="dew-row">
+        <span class="res-ico"><img src="${ASSET('Dew.png')}" alt="شبنم"></span>
+        <span class="res-val" id="dew-val">${fmt(state.dew)}</span>
+        <button class="res-plus" id="dew-plus" aria-label="فروشگاه">+</button>
       </div>`;
     document.getElementById('overlay').appendChild(tr);
-    tr.querySelector('#btn-settings').addEventListener('click', () => this.safe(() => this.openSettings()));
+    tr.querySelector('#coins-plus').addEventListener('click', () => this.safe(() => this.toast('فروشگاه به‌زودی برمی‌گردد')));
+    tr.querySelector('#dew-plus').addEventListener('click', () => this.safe(() => this.toast('فروشگاه به‌زودی برمی‌گردد')));
 
-    // پایین راست: فروشگاه / پیام‌ها / دوستان
-    const side = document.createElement('div');
-    side.id = 'hud-side';
-    side.innerHTML = `
+    // لبه‌ی چپ: دکمه‌های مربعی کرمی (پیام‌ها، دوستان، تنظیمات)
+    const left = document.createElement('div');
+    left.id = 'hud-left';
+    left.innerHTML = `
       <button class="side-btn" id="btn-mail">
         <span class="side-ico">${SVG.mail}</span><span>پیام‌ها</span>
         <span class="badge" id="mail-badge">۳</span>
@@ -64,13 +84,63 @@ export class UI {
       <button class="side-btn" id="btn-friends">
         <span class="side-ico">${SVG.friends}</span><span>دوستان</span>
       </button>
-      <button class="side-btn gold" id="btn-shop">
-        <span class="side-ico">${SVG.shop}</span><span>فروشگاه</span>
+      <button class="side-btn" id="btn-settings">
+        <span class="side-ico">${SVG.gear}</span><span>تنظیمات</span>
       </button>`;
-    document.getElementById('overlay').appendChild(side);
-    side.querySelector('#btn-shop').addEventListener('click', () => this.safe(() => this.openShop()));
-    side.querySelector('#btn-mail').addEventListener('click', () => this.safe(() => this.openMail()));
-    side.querySelector('#btn-friends').addEventListener('click', () => this.safe(() => this.openFriends()));
+    document.getElementById('overlay').appendChild(left);
+    left.querySelector('#btn-mail').addEventListener('click', () => this.safe(() => this.openMail()));
+    left.querySelector('#btn-friends').addEventListener('click', () => this.safe(() => this.openFriends()));
+    left.querySelector('#btn-settings').addEventListener('click', () => this.safe(() => this.openSettings()));
+
+  }
+
+  // دکمه‌ی رفت‌وبرگشت بین شهر و مزرعه
+  setAreaButton(areaKey) {
+    const label = document.getElementById('btn-area-label');
+    const btn = document.getElementById('btn-area');
+    if (!label || !btn) return;
+    if (areaKey === 'farm') {
+      label.textContent = 'شهر';
+      btn.querySelector('.cta-ico').innerHTML = `<img src="${ASSET('AmusementPark.png')}" alt="" draggable="false">`;
+    } else {
+      label.textContent = 'مزرعه';
+      btn.querySelector('.cta-ico').innerHTML = `<img src="${ASSET('Farm.png')}" alt="" draggable="false">`;
+    }
+  }
+
+  onAreaToggle() { /* توسط main پر می‌شود */ }
+
+  // ☁️ انتقال ابری بین صحنه‌ها: ابرها صفحه را می‌پوشانند، وسطش صحنه عوض می‌شود
+  cloudTransition(midFn) {
+    if (this.cloudBusy) return;
+    this.cloudBusy = true;
+    let ov = document.getElementById('clouds');
+    if (!ov) {
+      ov = document.createElement('div');
+      ov.id = 'clouds';
+      let puffs = '';
+      for (let i = 0; i < 42; i++) {
+        const size = 90 + Math.random() * 220;
+        const top = Math.random() * 96;
+        const delay = (Math.random() * 0.28).toFixed(2);
+        puffs += `<span class="cloud-puff" style="width:${size}px;height:${size * 0.62}px;top:${top}%;animation-delay:${delay}s"></span>`;
+      }
+      ov.innerHTML = `<div class="cloud-sheet"></div>${puffs}<div class="cloud-text">در راه…</div>`;
+      document.getElementById('game').appendChild(ov);
+    }
+    void ov.offsetWidth;
+    ov.classList.add('show');
+    setTimeout(() => {
+      try { midFn && midFn(); } catch (e) { console.error('[cloudTransition]', e); }
+      setTimeout(() => {
+        ov.classList.remove('show');
+        ov.classList.add('leave');
+        setTimeout(() => {
+          ov.classList.remove('leave');
+          this.cloudBusy = false;
+        }, 780);
+      }, 140);
+    }, 800);
   }
 
   // اجرای امن هندلرها — هیچ خطایی نباید بازی را بکشد
@@ -87,8 +157,8 @@ export class UI {
       const need = xpForLevel(state.level);
       document.getElementById('xp-fill').style.width = Math.min(100, (state.xp / need) * 100) + '%';
       document.getElementById('xp-text').textContent = `${fmt(state.xp)} / ${fmt(need)} XP`;
-      document.getElementById('coins-val').textContent = fmt(state.coins);
-      document.getElementById('dew-val').textContent = fmt(state.dew);
+      document.getElementById('coins-val').textContent = fmtMoney('coins');
+      document.getElementById('dew-val').textContent = fmtMoney('dew');
       const unclaimed = state.mails.filter(m => !m.claimed).length;
       const badge = document.getElementById('mail-badge');
       badge.textContent = fmt(unclaimed);
@@ -141,11 +211,54 @@ export class UI {
     if (el) el.style.display = 'none';
   }
 
+  removePlotLabel(plotId) {
+    const el = this.plotLabels.get(plotId);
+    if (el) {
+      el.remove();
+      this.plotLabels.delete(plotId);
+    }
+  }
+
+  // ---------- حباب حرف آدمک‌ها ----------
+  showBubble(id, x, z, text, y = 1.3) {
+    let el = this.plotLabels.get(id);
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'plot-label chat-bubble';
+      document.getElementById('labels').appendChild(el);
+      this.plotLabels.set(id, el);
+    }
+    el.textContent = text;
+    el.style.display = 'block';
+    el.dataset.wx = x;
+    el.dataset.wz = z;
+    el.dataset.wy = y;
+    // انیمیشن ظاهرشدن از اول پخش شود
+    el.classList.remove('bubble-in');
+    void el.offsetWidth;
+    el.classList.add('bubble-in');
+    this.positionLabel(el, x, z, y);
+  }
+
+  moveBubble(id, x, z) {
+    const el = this.plotLabels.get(id);
+    if (!el) return;
+    el.dataset.wx = x;
+    el.dataset.wz = z;
+  }
+
+  hideBubble(id) {
+    this.removePlotLabel(id);
+  }
+
   positionLabel(el, x, z, y = null) {
     const wy = y !== null ? y : (+el.dataset.wy || 1.9);
     const p = this.world.worldToScreen(x, wy, z);
     el.style.left = p.x + 'px';
     el.style.top = p.y + 'px';
+    // برچسب‌های صحنه‌ی دیگر (خارج از کادر) دیده نشوند
+    const off = p.x < -80 || p.y < -80 || p.x > window.innerWidth + 80 || p.y > window.innerHeight + 80;
+    el.style.visibility = off ? 'hidden' : 'visible';
   }
 
   refreshLabels() {
@@ -179,54 +292,36 @@ export class UI {
     });
   }
 
-  // حلقه‌ی نگه‌داشتن درخت
-  showHoldRing() {
-    if (!this.holdEl) {
-      this.holdEl = document.createElement('div');
-      this.holdEl.id = 'hold-ring';
-      this.holdEl.innerHTML = `
-        <svg viewBox="0 0 72 72">
-          <circle cx="36" cy="36" r="30" class="hold-bg"/>
-          <circle cx="36" cy="36" r="30" class="hold-fg" id="hold-fg"/>
-        </svg>
-        <div class="hold-text">نگه دار!</div>`;
-      document.getElementById('labels').appendChild(this.holdEl);
-    }
-    this.holdEl.style.display = 'block';
-    const fg = this.holdEl.querySelector('#hold-fg');
-    const circ = 2 * Math.PI * 30;
-    fg.style.strokeDasharray = circ;
-    fg.style.strokeDashoffset = circ;
-    this.holdCirc = circ;
-  }
-
-  updateHoldRing(k, x, z) {
-    if (!this.holdEl) return;
-    const fg = this.holdEl.querySelector('#hold-fg');
-    fg.style.strokeDashoffset = this.holdCirc * (1 - k);
-    const p = this.world.worldToScreen(x, 1.7, z);
-    this.holdEl.style.left = p.x + 'px';
-    this.holdEl.style.top = p.y + 'px';
-  }
-
-  hideHoldRing() {
-    if (this.holdEl) this.holdEl.style.display = 'none';
-  }
-
-  // ================= توست =================
-  toast(msg) {
+  // ================= پیغام بالای صفحه (با دکمه‌ی ✕) =================
+  toast(msg, opts = {}) {
     const box = document.getElementById('toasts');
-    if (!box) return;
+    if (!box) return () => {};
     const el = document.createElement('div');
     el.className = 'toast';
-    el.textContent = msg;
+    el.innerHTML = `<span class="toast-msg"></span><button class="toast-x" aria-label="بستن پیغام">✕</button>`;
+    el.querySelector('.toast-msg').textContent = msg;
     box.appendChild(el);
-    setTimeout(() => el.classList.add('show'), 16);
-    setTimeout(() => {
+    requestAnimationFrame(() => el.classList.add('show'));
+    let gone = false;
+    let timer = null;
+    const dismiss = () => {
+      if (gone) return;
+      gone = true;
+      if (timer) clearTimeout(timer);
       el.classList.remove('show');
-      setTimeout(() => el.remove(), 350);
-    }, 3200);
-    while (box.children.length > 3 && box.firstElementChild) box.firstElementChild.remove();
+      setTimeout(() => el.remove(), 300);
+      if (opts.onClose) { try { opts.onClose(); } catch (e) { /* ok */ } }
+    };
+    el.querySelector('.toast-x').addEventListener('click', (ev) => { ev.stopPropagation(); dismiss(); });
+    if (!opts.sticky) timer = setTimeout(dismiss, opts.ms || 3400);
+    // حداکثر سه پیغام هم‌زمان؛ قدیمی‌ترین غیرچسبان حذف می‌شود
+    while (box.children.length > 3) {
+      const first = box.querySelector('.toast:not(.sticky)') || box.firstElementChild;
+      if (!first || first === el) break;
+      first.remove();
+    }
+    if (opts.sticky) el.classList.add('sticky');
+    return dismiss;
   }
 
   needBuy(itemId) {
@@ -236,63 +331,64 @@ export class UI {
     return false;
   }
 
-  // ================= سینی کارت‌ها =================
-  buildTray() {
-    const tray = document.createElement('div');
-    tray.id = 'tray';
-    tray.innerHTML = `
-      <button class="tray-arrow" id="tray-prev" aria-label="قبلی">◀</button>
-      <div class="tray-scroll" id="tray-scroll"></div>
-      <button class="tray-arrow" id="tray-next" aria-label="بعدی">▶</button>`;
-    document.getElementById('overlay').appendChild(tray);
+  // آیکون آیتم: تصویر واقعی یا آیکون برداری — بدون استیکر/ایموجی
+  itemIconHtml(item) {
+    if (item.icon) return `<img src="${ASSET(item.icon)}" alt="${item.name}" draggable="false">`;
+    return ITEM_SVG[item.svg || item.id] || ITEM_SVG.house;
+  }
 
-    const scroll = tray.querySelector('#tray-scroll');
-    for (const id of TRAY_ORDER) {
+  // آیکون دسته‌های فروشگاه: تصویر یکی از محصولات همان دسته
+  catIconHtml(catId) {
+    const files = { plots: 'Product1.png', care: 'Water.png', seeds: 'Wheatgrain.png' };
+    if (catId === 'build') return ITEM_SVG.house;
+    return `<img src="${ASSET(files[catId] || 'coin.png')}" alt="" draggable="false">`;
+  }
+
+  // ================= سینی کارت‌ها =================
+  // فقط آیتم‌هایی که خریده‌ای و موجود داری اینجا می‌آیند؛
+  // همه‌ی محصولات و چیزهای خریدنی داخل فروشگاه (دسته‌بندی‌شده) هستند.
+  buildTray() {
+    // فعلاً در محصول شهری سینی کارت نداریم
+    this.trayScroll = null;
+    this._traySignature = null;
+    this.placingItem = null;
+    this._placeToastOff = null;
+  }
+  refreshTray() {
+    const scroll = this.trayScroll || document.getElementById('tray-scroll');
+    if (!scroll) return;
+    const owned = TRAY_ORDER.filter(id => (state.inventory[id] || 0) > 0);
+    const signature = owned.join('|');
+    if (signature === this._traySignature) {
+      // فقط شمارنده‌ها عوض شده‌اند
+      for (const id of owned) {
+        const el = scroll.querySelector(`[data-count="${id}"]`);
+        if (el) el.textContent = fmt(state.inventory[id] || 0);
+      }
+      return;
+    }
+    this._traySignature = signature;
+    scroll.innerHTML = '';
+    if (!owned.length) {
+      const empty = document.createElement('button');
+      empty.className = 'tray-empty';
+      empty.textContent = 'کارتی نداری — برای خرید، فروشگاه را باز کن';
+      empty.addEventListener('click', () => this.safe(() => this.openShop()));
+      scroll.appendChild(empty);
+      return;
+    }
+    for (const id of owned) {
       const item = ITEMS[id];
       const card = document.createElement('div');
       card.className = 'card';
       card.dataset.item = id;
+      if (this.placingItem === id) card.classList.add('selected');
       card.innerHTML = `
         <div class="card-title">${item.name}</div>
-        <div class="card-count" data-count="${id}">۰</div>
-        <div class="card-img"><img src="${ASSET(item.icon)}" alt="${item.name}" draggable="false"></div>
-        <div class="card-buy">
-          <span class="price"><img src="${ASSET(item.currency === 'dew' ? 'Dew.png' : 'coin.png')}" alt=""> ${fmt(item.price)}</span>
-          <button class="buy-btn">خرید</button>
-        </div>`;
-      scroll.appendChild(card);
-
-      card.querySelector('.buy-btn').addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.safe(() => {
-          if (this.buyItem(id)) {
-            this.refreshTray();
-            this.refreshHud();
-          }
-        });
-      });
-
+        <div class="card-count" data-count="${id}">${fmt(state.inventory[id] || 0)}</div>
+        <div class="card-img">${this.itemIconHtml(item)}</div>`;
       card.addEventListener('pointerdown', (e) => this.safe(() => this.onCardPointerDown(e, id)));
-    }
-
-    tray.querySelector('#tray-prev').addEventListener('click', () => {
-      scroll.scrollBy({ left: 320, behavior: 'smooth' });
-    });
-    tray.querySelector('#tray-next').addEventListener('click', () => {
-      scroll.scrollBy({ left: -320, behavior: 'smooth' });
-    });
-
-    this.refreshTray();
-  }
-
-  refreshTray() {
-    for (const id of TRAY_ORDER) {
-      const el = document.querySelector(`[data-count="${id}"]`);
-      if (el) {
-        const n = state.inventory[id] || 0;
-        el.textContent = fmt(n);
-        el.classList.toggle('empty', n === 0);
-      }
+      scroll.appendChild(card);
     }
   }
 
@@ -308,69 +404,179 @@ export class UI {
   buyItem(id, qty = 1, silent = false) {
     const item = ITEMS[id];
     const total = item.price * qty;
-    const wallet = item.currency === 'dew' ? state.dew : state.coins;
-    if (wallet < total) {
+    if (!canAfford(item.currency, total)) {
       if (!silent) this.toast(item.currency === 'dew' ? 'شبنم کافی نیست!' : 'سکه کافی نیست!');
       sfx.error();
       return false;
     }
-    if (item.currency === 'dew') state.dew -= total;
-    else state.coins -= total;
+    spend(item.currency, total);
     state.inventory[id] = (state.inventory[id] || 0) + qty;
     save();
     sfx.buy();
+    this.refreshTray();       // کارت تازه در سینی پایین ظاهر می‌شود
     this.pulseCard(id);
     if (!silent) {
-      this.toast(`«${item.name}» ×${fmt(qty)} خریداری شد و به کارت‌های پایین اضافه شد! ✅`);
+      this.toast(`«${item.name}» ×${fmt(qty)} خریداری شد و به کارت‌های پایین اضافه شد!`);
       this.bumpCurrencies();
-      this.refreshTray();
     }
     return true;
   }
 
-  // ---------- درگ‌اندراپ کارت‌ها ----------
+  // فروش آیتم‌های خریده‌شده از موجودی (در فروشگاه)
+  sellItem(id, qty = 1) {
+    const item = ITEMS[id];
+    const have = state.inventory[id] || 0;
+    const n = Math.min(qty, have);
+    if (n <= 0) {
+      this.toast(`از «${item.name}» چیزی نداری که بفروشی.`);
+      sfx.error();
+      return false;
+    }
+    const gain = Math.max(1, Math.floor(item.price * ITEM_SELL_RATIO)) * n;
+    state.inventory[id] = have - n;
+    if (item.currency === 'dew') addDew(gain);
+    else addCoins(gain);
+    save();
+    sfx.coin();
+    this.refreshTray();       // اگر تمام شد، کارت از پایین حذف می‌شود
+    this.bumpCurrencies();
+    this.toast(`«${item.name}» ×${fmt(n)} فروخته شد → +${fmt(gain)} ${item.currency === 'dew' ? 'شبنم' : 'سکه'}`);
+    return true;
+  }
+
+  // ---------- گذاشتن کارت: درگ، یا «انتخاب کن و روی زمین بزن» ----------
+
+  // هدف کارت در یک نقطه‌ی صفحه (مشترک بین درگ و ضربه روی زمین)
+  computeDropTarget(itemId, px, py) {
+    const mesh = this.world.pick(px, py);
+    if (mesh && mesh.userData.type === 'plot' && !isGroundItem(itemId)) {
+      return { target: { plotId: mesh.userData.id.slice(5), point: null }, ok: true, mesh, ground: null };
+    }
+    const ground = this.world.pickGround(px, py);
+    if (isGroundItem(itemId) && ground) {
+      const ok = this.canPlaceAt ? this.canPlaceAt(itemId, ground) !== false : true;
+      return { target: { plotId: null, point: ground }, ok, mesh, ground };
+    }
+    return { target: null, ok: false, mesh, ground };
+  }
+
+  _updateDragGhost(itemId, px, py) {
+    const r = this.computeDropTarget(itemId, px, py);
+    if (r.target && r.target.plotId && r.mesh) {
+      this.world.showPlacementGhost(r.mesh.position.x, r.mesh.position.z, 2.4, true);
+    } else if (r.target && r.ground) {
+      // سبز = جای مجاز، قرمز = جای نامجاز
+      this.world.showPlacementGhost(r.ground.x, r.ground.z, ITEMS[itemId].ghost || 2.2, r.ok);
+    } else {
+      this.world.hidePlacementGhost();
+    }
+    this.dropTarget = r.target;
+    return r;
+  }
+
+  _markSelectedCard() {
+    document.querySelectorAll('.card[data-item]').forEach(c => {
+      c.classList.toggle('selected', c.dataset.item === this.placingItem);
+    });
+  }
+
+  // انتخاب کارت با یک ضربه؛ بعد روی زمین هرجا بزنی همان‌جا گذاشته می‌شود
+  selectForPlacement(itemId) {
+    this.cancelPlacement();
+    this.placingItem = itemId;
+    this._markSelectedCard();
+    const item = ITEMS[itemId];
+    this._placeToastOff = this.toast(`«${item.name}» انتخاب شد — روی زمین، هرجا می‌خواهی بگذاری همان‌جا بزن.`, {
+      sticky: true,
+      onClose: () => { if (this.placingItem === itemId) this.cancelPlacement(); },
+    });
+    sfx.click();
+  }
+
+  cancelPlacement() {
+    this.placingItem = null;
+    this._markSelectedCard();
+    if (this._placeToastOff) {
+      const off = this._placeToastOff;
+      this._placeToastOff = null;
+      off();
+    }
+  }
+
+  // ضربه روی بوم وقتی کارتی انتخاب است (از main صدا زده می‌شود)
+  tryPlaceSelected(clientX, clientY) {
+    const itemId = this.placingItem;
+    if (!itemId) return false;
+    const r = this.computeDropTarget(itemId, clientX, clientY);
+    if (!r.target) {
+      if (r.mesh && r.mesh.userData.type === 'building') {
+        this.toast('این کارت روی ساختمان کار نمی‌کند؛ روی زمین بزن.');
+      } else {
+        this.toast(isGroundItem(itemId) ? 'روی زمین خالی بزن تا گذاشته شود.' : 'روی یک جایگاه کشت بزن.');
+      }
+      sfx.error();
+      return true;
+    }
+    if ((state.inventory[itemId] || 0) <= 0) {
+      this.needBuy(itemId);
+      this.cancelPlacement();
+      return true;
+    }
+    this.onDropItem(itemId, r.target);
+    // اگر هنوز از آن آیتم داری، انتخاب می‌ماند تا چندتا پشت‌سرهم بگذاری (مثل حصار)
+    if ((state.inventory[itemId] || 0) <= 0) this.cancelPlacement();
+    else this._markSelectedCard();
+    return true;
+  }
+
   onCardPointerDown(e, itemId) {
-    if (e.target.closest('.buy-btn')) return;
     e.preventDefault();
     const ghost = document.getElementById('drag-ghost');
     const item = ITEMS[itemId];
-    ghost.innerHTML = `<img src="${ASSET(item.icon)}" alt=""><span>${item.name}</span>`;
-    ghost.style.display = 'flex';
+    // روی لمسی کارت و نقطه‌ی افتادن بالای انگشت‌اند تا جای گذاشتن دیده شود
+    this.dragOffY = e.pointerType === 'touch' ? -92 : 0;
     this.dragItem = itemId;
     this.dragMoved = false;
+    this.dropTarget = null;
+    const startX = e.clientX, startY = e.clientY;
+    let rafId = 0, lastX = e.clientX, lastY = e.clientY;
+    const paintGhost = () => {
+      rafId = 0;
+      const px = lastX, py = lastY + (this.dragOffY || 0);
+      ghost.style.transform = `translate(${px}px, ${py}px) translate(-50%, -50%)`;
+      this._updateDragGhost(itemId, px, py);
+    };
     const move = (ev) => {
-      this.dragMoved = true;
-      ghost.style.left = ev.clientX + 'px';
-      ghost.style.top = ev.clientY + 'px';
-      const mesh = this.world.pick(ev.clientX, ev.clientY);
-      const ground = this.world.pickGround(ev.clientX, ev.clientY);
-      if (mesh && mesh.userData.type === 'plot') {
-        this.world.showPlacementGhost(mesh.position.x, mesh.position.z, 2.4, true);
-        this.dropTarget = { plotId: mesh.userData.id.slice(5), point: null };
-      } else if (itemId === 'plot' && ground) {
-        this.world.showPlacementGhost(ground.x, ground.z, 2.6, true);
-        this.dropTarget = { plotId: null, point: ground };
-      } else {
-        this.world.hidePlacementGhost();
-        this.dropTarget = null;
+      lastX = ev.clientX; lastY = ev.clientY;
+      if (!this.dragMoved) {
+        // لرزش کوچک انگشت «درگ» حساب نمی‌شود
+        if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < 11) return;
+        this.dragMoved = true;
+        ghost.innerHTML = `${this.itemIconHtml(item)}<span>${item.name}</span>`;
+        ghost.style.display = 'flex';
       }
+      // ری‌کست فقط یک‌بار در هر فریم — بدون لگ
+      if (!rafId) rafId = requestAnimationFrame(paintGhost);
     };
     const up = (ev) => {
       document.removeEventListener('pointermove', move);
       document.removeEventListener('pointerup', up);
+      document.removeEventListener('pointercancel', up);
+      if (rafId) cancelAnimationFrame(rafId);
       ghost.style.display = 'none';
-      this.world.hidePlacementGhost();
-      const target = this.dropTarget;
-      this.dropTarget = null;
       this.dragItem = null;
-
       if (!this.dragMoved) {
-        this.toast(`«${item.name}» — ${item.desc} (بخر و روی زمین بینداز)`);
+        this.world.hidePlacementGhost();
+        // ضربه‌ی ساده روی کارت = حالت گذاشتن با ضربه روی زمین
+        if (this.placingItem === itemId) this.cancelPlacement();
+        else this.selectForPlacement(itemId);
         return;
       }
-      if (!target) {
-        const mesh = this.world.pick(ev.clientX, ev.clientY);
-        if (mesh && mesh.userData.type === 'building') {
+      const r = this._updateDragGhost(itemId, ev.clientX, ev.clientY + (this.dragOffY || 0));
+      this.world.hidePlacementGhost();
+      this.dropTarget = null;
+      if (!r.target) {
+        if (r.mesh && r.mesh.userData.type === 'building') {
           this.toast('این کارت روی ساختمان کار نمی‌کند؛ روی مزرعه بینداز.');
         } else {
           this.toast('اینجا نمی‌توانی بیندازی؛ روی جایگاه کشت بینداز.');
@@ -379,19 +585,15 @@ export class UI {
         return;
       }
       if ((state.inventory[itemId] || 0) <= 0) {
-        if (!this.buyItem(itemId, 1, true)) {
-          this.needBuy(itemId);
-          return;
-        }
-        this.refreshTray();
-        this.bumpCurrencies();
+        this.needBuy(itemId);
+        return;
       }
-      this.onDropItem(itemId, target);
+      this.cancelPlacement();
+      this.onDropItem(itemId, r.target);
     };
-    ghost.style.left = e.clientX + 'px';
-    ghost.style.top = e.clientY + 'px';
     document.addEventListener('pointermove', move);
     document.addEventListener('pointerup', up);
+    document.addEventListener('pointercancel', up);
   }
 
   onDropItem(itemId, target) {
@@ -447,50 +649,64 @@ export class UI {
 
   // ================= فروشگاه — صفحه‌ی جداگانه به سبک کلش =================
   openShop(category = 'seeds') {
-    const panel = this.openModal('', 'panel-shop');
+    const panel = this.openModal('', 'panel-shop panel-full');
     this.shopPanel = panel;
     this.renderShop(panel, category);
   }
 
   renderShop(panel, category) {
     const cats = CATEGORIES.map((c, i) => `
-      <button class="shop-cat ${c.id === category ? 'active' : ''}" data-cat="${c.id}">
-        <span class="shop-cat-ico">${['🏗️', '💧', '🌱'][i] || '🛒'}</span>
-        <span>${c.name}</span>
+      <button class="shop-cat ${c.id === category ? 'active' : ''}" data-cat="${c.id}" title="${c.name}" aria-label="${c.name}">
+        <span class="shop-cat-ico">${this.catIconHtml(c.id)}</span>
       </button>
     `).join('');
+    const catName = (CATEGORIES.find(c => c.id === category) || {}).name || '';
 
-    const items = Object.values(ITEMS).filter(i => i.category === category).map(i => `
+    const items = Object.values(ITEMS).filter(i => i.category === category).map(i => {
+      const sellOne = Math.max(1, Math.floor(i.price * ITEM_SELL_RATIO));
+      const curImg = ASSET(i.currency === 'dew' ? 'Dew.png' : 'coin.png');
+      const have = state.inventory[i.id] || 0;
+      return `
       <div class="shop-item" data-shop-item="${i.id}">
-        <div class="shop-item-rarity"></div>
-        <div class="shop-item-img"><img src="${ASSET(i.icon)}" alt="${i.name}" draggable="false"></div>
+        <button class="shop-info" data-info="${i.id}" aria-label="توضیح">i</button>
         <div class="shop-item-name">${i.name}</div>
-        <div class="shop-item-desc">${i.desc}</div>
-        <div class="shop-item-have">در کارت‌ها: <b>${fmt(state.inventory[i.id] || 0)}</b></div>
+        <div class="shop-item-img">${this.itemIconHtml(i)}<span class="shop-have-badge" data-have="${i.id}">${have ? '×' + fmt(have) : ''}</span></div>
         <div class="shop-qty">
           ${BUY_STEPS.map((q, qi) => `
             <button class="qty-btn ${qi === 0 ? 'active' : ''}" data-qty="${q}" data-for="${i.id}">×${fmt(q)}</button>
           `).join('')}
         </div>
-        <button class="shop-buy" data-buy="${i.id}">
-          <img src="${ASSET(i.currency === 'dew' ? 'Dew.png' : 'coin.png')}" alt="">
-          <span data-total="${i.id}">${fmt(i.price)}</span>
-        </button>
-      </div>
-    `).join('');
+        <div class="shop-actions">
+          <button class="shop-buy" data-buy="${i.id}">
+            خرید <img src="${curImg}" alt=""> <span data-total="${i.id}">${fmt(i.price)}</span>
+          </button>
+          <button class="shop-sell" data-sell="${i.id}" ${have > 0 ? '' : 'disabled'}>
+            فروش <img src="${curImg}" alt=""> <span data-selltotal="${i.id}">${fmt(sellOne)}</span>
+          </button>
+        </div>
+      </div>`;
+    }).join('');
 
     panel.innerHTML = `
-      <div class="shop-header">
-        <h2>🏪 فروشگاه لوکو</h2>
-        <div class="shop-wallet">
-          <span class="w-coin"><img src="${ASSET('coin.png')}" alt=""> ${fmt(state.coins)}</span>
-          <span class="w-dew"><img src="${ASSET('Dew.png')}" alt=""> ${fmt(state.dew)}</span>
-        </div>
+      <div class="shop-topbar">
+        <div class="shop-cats">${cats}</div>
         <button class="modal-close">✕</button>
       </div>
+      <div class="shop-titleband">${catName}</div>
       <div class="shop-body">
-        <div class="shop-cats">${cats}</div>
         <div class="shop-grid">${items}</div>
+      </div>
+      <div class="shop-wallet">
+        <span class="w-coin"><img src="${ASSET('coin.png')}" alt=""> ${fmtMoney('coins')}</span>
+        <span class="w-dew"><img src="${ASSET('Dew.png')}" alt=""> ${fmtMoney('dew')}</span>
+      </div>
+      <div class="item-info-pop" hidden>
+        <div class="item-info-card">
+          <div class="item-info-img"></div>
+          <div class="item-info-name"></div>
+          <p class="item-info-desc"></p>
+          <button class="item-info-back">برگرد</button>
+        </div>
       </div>`;
 
     panel.querySelector('.modal-close').addEventListener('click', () => this.safe(() => this.closeModal()));
@@ -507,6 +723,46 @@ export class UI {
         const item = ITEMS[id];
         const totalEl = panel.querySelector(`[data-total="${id}"]`);
         if (totalEl) totalEl.textContent = fmt(item.price * +btn.dataset.qty);
+        const sellEl = panel.querySelector(`[data-selltotal="${id}"]`);
+        if (sellEl) sellEl.textContent = fmt(Math.max(1, Math.floor(item.price * ITEM_SELL_RATIO)) * +btn.dataset.qty);
+      }));
+    });
+
+    // به‌روزرسانی ظاهری ردیف یک آیتم بعد از خرید/فروش
+    const syncRow = (id) => {
+      const badge = panel.querySelector(`[data-have="${id}"]`);
+      if (badge) {
+        const n = state.inventory[id] || 0;
+        badge.textContent = n ? '×' + fmt(n) : '';
+      }
+      const sellBtn = panel.querySelector(`[data-sell="${id}"]`);
+      if (sellBtn) sellBtn.disabled = (state.inventory[id] || 0) <= 0;
+      const wallet = panel.querySelector('.shop-wallet');
+      if (wallet) wallet.innerHTML = `
+        <span class="w-coin"><img src="${ASSET('coin.png')}" alt=""> ${fmtMoney('coins')}</span>
+        <span class="w-dew"><img src="${ASSET('Dew.png')}" alt=""> ${fmtMoney('dew')}</span>`;
+    };
+    const qtyOf = (id) => {
+      const qtyBtn = panel.querySelector(`.qty-btn[data-for="${id}"].active`);
+      return qtyBtn ? +qtyBtn.dataset.qty : 1;
+    };
+
+    // دکمه‌ی «!» — پنجره‌ی توضیح آیتم با دکمه‌ی برگشت
+    const infoPop = panel.querySelector('.item-info-pop');
+    const closeInfo = () => { if (infoPop) infoPop.hidden = true; };
+    if (infoPop) {
+      infoPop.addEventListener('click', (e) => { if (e.target === infoPop) closeInfo(); });
+      infoPop.querySelector('.item-info-back').addEventListener('click', () => this.safe(closeInfo));
+    }
+    panel.querySelectorAll('.shop-info').forEach(btn => {
+      btn.addEventListener('click', () => this.safe(() => {
+        const item = ITEMS[btn.dataset.info];
+        if (!item || !infoPop) return;
+        infoPop.querySelector('.item-info-img').innerHTML = this.itemIconHtml(item);
+        infoPop.querySelector('.item-info-name').textContent = item.name;
+        infoPop.querySelector('.item-info-desc').textContent = item.desc;
+        infoPop.hidden = false;
+        sfx.click();
       }));
     });
 
@@ -514,17 +770,21 @@ export class UI {
     panel.querySelectorAll('.shop-buy').forEach(btn => {
       btn.addEventListener('click', () => this.safe(() => {
         const id = btn.dataset.buy;
-        const qtyBtn = panel.querySelector(`.qty-btn[data-for="${id}"].active`);
-        const qty = qtyBtn ? +qtyBtn.dataset.qty : 1;
-        if (this.buyItem(id, qty)) {
-          this.refreshTray();
+        if (this.buyItem(id, qtyOf(id))) {
           this.refreshHud();
-          const have = panel.querySelector(`[data-shop-item="${id}"] .shop-item-have b`);
-          if (have) have.textContent = fmt(state.inventory[id] || 0);
-          const wallet = panel.querySelector('.shop-wallet');
-          if (wallet) wallet.innerHTML = `
-            <span class="w-coin"><img src="${ASSET('coin.png')}" alt=""> ${fmt(state.coins)}</span>
-            <span class="w-dew"><img src="${ASSET('Dew.png')}" alt=""> ${fmt(state.dew)}</span>`;
+          syncRow(id);
+          btn.classList.add('pulse');
+          setTimeout(() => btn.classList.remove('pulse'), 350);
+        }
+      }));
+    });
+
+    // فروش از موجودی
+    panel.querySelectorAll('.shop-sell').forEach(btn => {
+      btn.addEventListener('click', () => this.safe(() => {
+        const id = btn.dataset.sell;
+        if (this.sellItem(id, qtyOf(id))) {
+          syncRow(id);
           btn.classList.add('pulse');
           setTimeout(() => btn.classList.remove('pulse'), 350);
         }
@@ -548,9 +808,9 @@ export class UI {
       </div>
     `).join('');
     const panel = this.openModal(`
-      <div class="shop-header"><h2>✉️ پیام‌ها</h2><button class="modal-close">✕</button></div>
+      <div class="shop-header"><h2>پیام‌ها</h2><button class="modal-close">✕</button></div>
       <div class="mail-list">${rows}</div>
-    `, 'panel-mail');
+    `, 'panel-mail panel-full');
     panel.querySelector('.modal-close').addEventListener('click', () => this.safe(() => this.closeModal()));
     panel.querySelectorAll('[data-claim]').forEach(btn => {
       btn.addEventListener('click', () => this.safe(() => {
@@ -583,9 +843,9 @@ export class UI {
       </div>
     `).join('');
     const panel = this.openModal(`
-      <div class="shop-header"><h2>👥 دوستان</h2><button class="modal-close">✕</button></div>
+      <div class="shop-header"><h2>دوستان</h2><button class="modal-close">✕</button></div>
       <div class="mail-list">${rows}</div>
-    `, 'panel-mail');
+    `, 'panel-mail panel-full');
     panel.querySelector('.modal-close').addEventListener('click', () => this.safe(() => this.closeModal()));
     panel.querySelectorAll('.friend-visit').forEach((btn, i) => {
       btn.addEventListener('click', () => this.safe(() => {
@@ -597,14 +857,14 @@ export class UI {
 
   openSettings() {
     const panel = this.openModal(`
-      <div class="shop-header"><h2>⚙️ تنظیمات</h2><button class="modal-close">✕</button></div>
+      <div class="shop-header"><h2>تنظیمات</h2><button class="modal-close">✕</button></div>
       <div class="settings-list">
         <label class="setting-row">
           <span>صدای بازی</span>
           <input type="checkbox" id="sound-toggle" ${state.sound ? 'checked' : ''}>
         </label>
         <button class="danger-btn" id="reset-btn">شروع دوباره‌ی بازی</button>
-        <div class="about">شهر لوکو 🌳 — نسخه‌ی ۱.۱</div>
+        <div class="about">شهر لوکو 🌳 — نسخه‌ی ۴.۰ (شهر سه‌بعدی: ساختمان‌های اصلی، ماشین‌ها و آدمک‌های در حال رفت‌وآمد)</div>
       </div>
     `, 'panel-settings');
     panel.querySelector('.modal-close').addEventListener('click', () => this.safe(() => this.closeModal()));
@@ -620,13 +880,14 @@ export class UI {
 
   // ---------- پنل ساختمان ----------
   openBuilding(building) {
-    const ready = buildingReady(building.id);
-    const left = cooldownLeft(building.id) / 1000;
+    const cd = building.action ? building.action.cooldown : 0;
+    const ready = buildingReady(building.id, cd);
+    const left = cooldownLeft(building.id, cd) / 1000;
     const btnHtml = building.action
       ? `<button class="building-action" id="building-action-btn" ${ready ? '' : 'disabled'}>
            ${ready ? building.action.label : `⏳ ${fmt(Math.ceil(left))} ثانیه`}
          </button>`
-      : `<button class="building-action" id="building-focus-btn">برو به مزرعه 🌾</button>`;
+      : '';
 
     const panel = this.openModal(`
       <div class="shop-header">
@@ -645,7 +906,7 @@ export class UI {
     const actBtn = panel.querySelector('#building-action-btn');
     if (actBtn) {
       actBtn.addEventListener('click', () => this.safe(() => {
-        if (!buildingReady(building.id)) return;
+        if (!buildingReady(building.id, cd)) return;
         const a = building.action;
         if (a.coins) addCoins(a.coins);
         if (a.dew) addDew(a.dew);
@@ -674,7 +935,7 @@ export class UI {
       const tick = setInterval(() => {
         try {
           if (!document.body.contains(panel)) { clearInterval(tick); return; }
-          const l = cooldownLeft(building.id) / 1000;
+          const l = cooldownLeft(building.id, cd) / 1000;
           const btn = panel.querySelector('#building-action-btn');
           if (btn) {
             if (l <= 0) {
