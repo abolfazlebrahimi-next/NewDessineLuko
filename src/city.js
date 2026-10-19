@@ -50,6 +50,8 @@ export class City {
     this.world = world;
     this.ui = ui;
     this.group = new THREE.Group();
+    // کل شهر ۴۵ درجه می‌چرخد تا مثل تصویر مرجع، ایزومتریکِ لوزی دیده شود
+    this.group.rotation.y = Math.PI / 4;
     world.scene.add(this.group);
     this.loader = new GLTFLoader(sharedManager);
     this.cars = [];
@@ -60,6 +62,12 @@ export class City {
     this.B = CITY.block;
     this.R = CITY.road;
     this._shadowMat = null;
+  }
+
+  // مختصات محلی شهر ← مختصات جهان (برای اسپریت‌ها و برچسب‌هایی که بیرون گروه‌اند)
+  _toWorld(x, z) {
+    const c = Math.SQRT1_2, s = Math.SQRT1_2; // cos/sin ۴۵ درجه
+    return { x: x * c + z * s, z: -x * s + z * c };
   }
 
   async init() {
@@ -92,18 +100,18 @@ export class City {
     const g = c.getContext('2d');
 
     // سنگفرش پایه
-    g.fillStyle = '#b7bab0';
+    g.fillStyle = '#bcc0c9';
     g.fillRect(0, 0, S, S);
 
     // کف بلوک‌ها
-    const tones = ['#c9ccc0', '#c2c6ba', '#cdd0c2'];
+    const tones = ['#ccd0d8', '#c3c8d3', '#d3d6de'];
     for (let col = -range; col <= range; col++) {
       for (let row = -range; row <= range; row++) {
         const bx = X(col * P - B / 2), by = Y(row * P - B / 2), bs = U(B);
         const isCore = Math.abs(col) <= 1 && Math.abs(row) <= 1;
         const isLawn = (col === -1 && row === 1) || (col === 0 && row === -1);
         if (isLawn) {
-          g.fillStyle = '#6cab4c';
+          g.fillStyle = '#5f9e46';
           g.fillRect(bx, by, bs, bs);
           for (let i = 0; i < 130; i++) {
             g.fillStyle = `rgba(${40 + rand() * 40 | 0},${110 + rand() * 50 | 0},40,${0.12 + rand() * 0.15})`;
@@ -130,7 +138,7 @@ export class City {
           }
         }
         // حاشیه‌ی پیاده‌رو (جدول)
-        g.strokeStyle = 'rgba(255,255,255,.35)';
+        g.strokeStyle = 'rgba(255,255,255,.55)';
         g.lineWidth = U(0.32);
         g.strokeRect(bx + U(0.16), by + U(0.16), bs - U(0.32), bs - U(0.32));
         g.strokeStyle = 'rgba(70,72,66,.5)';
@@ -142,7 +150,7 @@ export class City {
     // آسفالت خیابان‌ها
     const lines = [];
     for (let i = -range - 1; i <= range; i++) lines.push((i + 0.5) * P);
-    g.fillStyle = '#454954';
+    g.fillStyle = '#525762';
     for (const l of lines) {
       g.fillRect(X(l - R / 2), 0, U(R), S);
       g.fillRect(0, Y(l - R / 2), S, U(R));
@@ -164,11 +172,11 @@ export class City {
     for (const l of lines) {
       for (const [g0, g1] of gaps) {
         if (g1 - g0 < 0.6) continue;
-        g.fillStyle = '#d9a92f';
-        g.fillRect(X(l - R / 2 + 0.22), Y(g0), U(0.15), U(g1 - g0));
-        g.fillRect(X(l + R / 2 - 0.37), Y(g0), U(0.15), U(g1 - g0));
-        g.fillRect(X(g0), Y(l - R / 2 + 0.22), U(g1 - g0), U(0.15));
-        g.fillRect(X(g0), Y(l + R / 2 - 0.37), U(g1 - g0), U(0.15));
+        g.fillStyle = 'rgba(242,243,245,.92)';
+        g.fillRect(X(l - R / 2 + 0.2), Y(g0), U(0.14), U(g1 - g0));
+        g.fillRect(X(l + R / 2 - 0.34), Y(g0), U(0.14), U(g1 - g0));
+        g.fillRect(X(g0), Y(l - R / 2 + 0.2), U(g1 - g0), U(0.14));
+        g.fillRect(X(g0), Y(l + R / 2 - 0.34), U(g1 - g0), U(0.14));
         g.fillStyle = '#f0f0ea';
         for (let d = g0 + 0.35; d + 1.05 < g1; d += 2.0) {
           g.fillRect(X(l - 0.09), Y(d), U(0.18), U(1.05));
@@ -232,11 +240,12 @@ export class City {
     const labelBox = document.getElementById('labels');
     LAYOUT.buildings.forEach((b, i) => {
       const x = b.col * P, z = b.row * P;
+      const wp = this._toWorld(x, z - 1.15); // اسپریت‌ها بیرون گروه چرخیده‌اند
       let sp = null;
       if (b.id !== 'garden') {
         sp = this.world.addSprite({
           tag: `building:${b.id}`, file: b.tex,
-          x, z: z - 1.15, width: b.w, depthTest: true,
+          x: wp.x, z: wp.z, width: b.w, depthTest: true,
         });
       }
       if (labelBox) {
@@ -244,7 +253,7 @@ export class City {
         el.className = 'city-label';
         el.textContent = `${i + 1}. ${b.name}`;
         labelBox.appendChild(el);
-        this.labels.push({ el, sp, x, z: z - 1.15, h: 2.4 });
+        this.labels.push({ el, sp, x: wp.x, z: wp.z, h: 2.4 });
       }
     });
   }
@@ -394,7 +403,14 @@ export class City {
 
   async _buildFiller() {
     const { P } = this;
-    // برنامه‌ی چیدمان از قبل مشخص است؛ هر مدل که رسید جاهایش پر می‌شود
+    // وسایل روی بام و کنار ساختمان‌ها (دودکش/پنل خورشیدی) از قبل آماده باشند
+    const props = {};
+    await Promise.allSettled(
+      ['chimney-basic', 'chimney-medium', 'solar-panel-flat', 'solar-panel-landscape']
+        .map(async (n) => { try { props[n] = await this._loadGLB(CITY.cityBase + n + '.glb'); } catch (e) { /* ok */ } }),
+    );
+    const propNames = Object.keys(props);
+
     const plan = [];
     const add = (name, x, z, foot, maxH, rot) => plan.push({ name, x, z, foot, maxH, rot });
     const faceRot = (c, r) => {
@@ -408,25 +424,29 @@ export class City {
         if (c === -3 && r === -3) {
           add('water-tower', x - 1.5, z - 1, 5.5, 10, 0.4);
           add('detail-tank', x + 2.6, z + 2.2, 3.2, 3.6, 0);
+          add('detail-tank-large', x + 2.2, z - 2.6, 3.6, 4.2, 0);
           continue;
         }
         if (c === 3 && r === 3) {
           add('shipping-container-a', x - 1.8, z - 1.4, 4.8, 3, 0.15);
           add('shipping-container-b', x + 1.6, z + 1.2, 4.8, 3, -0.1);
           add('shipping-container-c', x + 2.2, z - 2.4, 4.8, 3, 1.65);
+          add('windmill', x - 3.4, z + 2.8, 3.4, 7, 0.3);
           continue;
         }
-        const nearCore = Math.abs(c) === 2 || Math.abs(r) === 2;
+        // شهر شلوغ: همه‌ی بلوک‌ها پر، مثل تصویر Kenney
         const roll = rand();
-        if (nearCore || roll < 0.5) {
-          add(pickOf(CITY.filler), x, z - 0.7, 7.9, 8.2, faceRot(c, r));
-        } else if (roll < 0.85) {
-          add(pickOf(CITY.filler), x - 2.55, z - 1.1, 4.6, 6, faceRot(c, r));
-          add(pickOf(CITY.filler), x + 2.55, z - 1.1, 4.6, 6, faceRot(c, r));
-          add(pickOf(CITY.filler), x + 0.2, z + 2.9, 4.2, 5, faceRot(c, r) + Math.PI);
+        if (roll < 0.42) {
+          add(pickOf(CITY.filler), x, z - 0.8, 8.3, 8.4, faceRot(c, r));
+          if (rand() < 0.5) add(pickOf(CITY.filler), x + 3.1, z + 3.2, 3.9, 4.6, faceRot(c, r) + Math.PI / 2);
+        } else if (roll < 0.78) {
+          add(pickOf(CITY.filler), x - 2.55, z - 1.4, 4.7, 6.2, faceRot(c, r));
+          add(pickOf(CITY.filler), x + 2.55, z - 1.4, 4.7, 6.2, faceRot(c, r));
+          add(pickOf(CITY.filler), x - 1.4, z + 2.9, 4.3, 5, faceRot(c, r) + Math.PI);
         } else {
-          add(pickOf(['shipping-container-a', 'shipping-container-b', 'detail-tank']), x - 1.6, z + 0.4, 4.6, 3.2, rand() * 0.6 - 0.3);
-          add(pickOf(CITY.filler), x + 2.2, z - 1.6, 5.2, 6, faceRot(c, r));
+          add(pickOf(['shipping-container-a', 'shipping-container-b', 'shipping-container-c']), x - 2.2, z + 1.8, 4.6, 3.2, rand() * 0.5 - 0.25);
+          add(pickOf(['detail-tank', 'detail-tank-large']), x + 3.2, z + 2.4, 3.1, 3.8, 0);
+          add(pickOf(CITY.filler), x + 0.6, z - 2.2, 6.4, 7, faceRot(c, r));
         }
       }
     }
@@ -456,6 +476,20 @@ export class City {
         } else {
           obj = this._fallbackBuilding(it.foot, it.maxH);
         }
+        // گاهی دودکش یا پنل خورشیدی روی بام (مثل تصویر Kenney)
+        obj.updateMatrixWorld(true);
+        if (propNames.length && it.foot >= 4.5 && rand() < 0.42) {
+          const box = new THREE.Box3().setFromObject(obj);
+          const propName = pickOf(propNames);
+          const propScene = props[propName];
+          if (propScene && box.max.y > 1.2) {
+            const isChimney = propName.startsWith('chimney');
+            const prop = this._normalized(propScene.clone(true), isChimney ? 0.85 : 2.1, isChimney ? 1.7 : 0.6);
+            prop.position.set((rand() - 0.5) * it.foot * 0.4, box.max.y - 0.04, (rand() - 0.5) * it.foot * 0.4);
+            if (!isChimney) prop.rotation.y = rand() < 0.5 ? 0 : Math.PI / 2;
+            obj.add(prop);
+          }
+        }
         obj.position.set(it.x, 0.06, it.z);
         obj.rotation.y = it.rot;
         this.group.add(obj);
@@ -466,95 +500,101 @@ export class City {
 
   // ---------- درخت‌ها و چراغ‌ها ----------
   async _buildTreesLamps() {
-    const { P, B, R } = this;
+    const { P, R, B } = this;
     const spots = [];
-    const cornerSpots = (cx, cz, inset) => {
-      for (const dx of [-1, 1]) for (const dz of [-1, 1]) spots.push([cx + dx * inset, cz + dz * inset]);
-    };
-    for (const b of LAYOUT.buildings) cornerSpots(b.col * P, b.row * P, B / 2 - 1.1);
-    cornerSpots(0, -P, B / 2 - 1.2);
-    // ردیف درخت دو طرف خیابان‌های اصلی هسته
-    for (const line of [-0.5, 0.5]) {
-      for (let t = -2; t <= 2; t++) {
-        spots.push([line * P - R / 2 - 0.85, t * P + 2]);
-        spots.push([line * P + R / 2 + 0.85, t * P - 2]);
-        spots.push([t * P + 2, line * P - R / 2 - 0.85]);
-        spots.push([t * P - 2, line * P + R / 2 + 0.85]);
+    // ردیف‌های منظم درخت در دو طرف هر خیابان (مثل تصویر مرجع)
+    for (const l of [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5]) {
+      const line = l * P;
+      let k = 0;
+      for (let t = -3 * P + 2; t <= 3 * P - 1.5; t += 3.9, k++) {
+        const off = (k % 2) * 1.95;
+        spots.push([line - R / 2 - 0.75, t + off]);
+        spots.push([line + R / 2 + 0.75, t + 1.95 - off]);
+        spots.push([t + off, line - R / 2 - 0.75]);
+        spots.push([t + 1.95 - off, line + R / 2 + 0.75]);
       }
     }
-    for (let i = 0; i < 110; i++) {
-      const ang = rand() * Math.PI * 2;
-      const rad = 62 + rand() * 38;
-      spots.push([Math.cos(ang) * rad, Math.sin(ang) * rad]);
-    }
-    for (let c = -CITY.range; c <= CITY.range; c++) for (let r = -CITY.range; r <= CITY.range; r++) {
-      if (Math.abs(c) <= 1 && Math.abs(r) <= 1) continue;
-      if (rand() < 0.45) spots.push([c * P + (rand() - 0.5) * 7.5, r * P + B / 2 - 1]);
+    // حلقه‌ی درخت روی چمن بیرون شهر
+    for (let i = 0; i < 46; i++) {
+      const a = rand() * Math.PI * 2;
+      const rad = CITY.half + 7 + rand() * 16;
+      spots.push([Math.cos(a) * rad, Math.sin(a) * rad]);
     }
 
-    let treeScene = null;
-    try { treeScene = await this._loadGLB('models/nature/tree.glb'); } catch (e) { /* جایگزین */ }
-
-    const m4 = new THREE.Matrix4();
-    const q = new THREE.Quaternion();
-    const eul = new THREE.Euler();
-    if (treeScene) {
-      const meshes = [];
-      treeScene.updateMatrixWorld(true);
-      treeScene.traverse((o) => { if (o.isMesh) meshes.push(o); });
-      const box = new THREE.Box3().setFromObject(treeScene);
-      const h = Math.max(0.001, box.max.y - box.min.y);
-      const baseScale = 2.7 / h;
-      const mats = spots.map(([x, z]) => {
-        const s = baseScale * (0.8 + rand() * 0.55);
-        eul.set(0, rand() * Math.PI * 2, 0);
-        q.setFromEuler(eul);
-        return new THREE.Matrix4().compose(
-          new THREE.Vector3(x, -box.min.y * s + 0.03, z), q, new THREE.Vector3(s, s, s),
-        );
-      });
-      for (const mesh of meshes) {
-        const geo = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);
-        const inst = new THREE.InstancedMesh(geo, mesh.material, mats.length);
-        mats.forEach((m, i) => inst.setMatrixAt(i, m));
+    const variants = [
+      { file: 'models/nature/tree.glb', h: 1.75, subset: [] },
+      { file: 'models/nature/tree-tall.glb', h: 2.35, subset: [] },
+    ];
+    spots.forEach((sp, i) => variants[i % 2].subset.push(sp));
+    let anyModel = false;
+    const dummy = new THREE.Object3D();
+    await Promise.allSettled(variants.map(async (v) => {
+      let scene = null;
+      try { scene = await this._loadGLB(ASSETS(v.file)); } catch (e) { /* جایگزین */ }
+      if (!scene) return;
+      anyModel = true;
+      const src = this._normalized(scene, 99, v.h);
+      src.updateMatrixWorld(true);
+      const parts = [];
+      src.traverse((o) => { if (o.isMesh) parts.push(o); });
+      for (const m of parts) {
+        const inst = new THREE.InstancedMesh(m.geometry, m.material, v.subset.length);
+        v.subset.forEach(([x, z], i) => {
+          dummy.position.set(x, 0, z);
+          dummy.rotation.set(0, ((i * 137) % 360) * Math.PI / 180, 0);
+          const sc = 0.88 + ((i * 29) % 10) * 0.03;
+          dummy.scale.setScalar(sc);
+          dummy.updateMatrix();
+          inst.setMatrixAt(i, dummy.matrix.clone().multiply(m.matrixWorld));
+        });
         inst.instanceMatrix.needsUpdate = true;
         this.group.add(inst);
       }
-    } else {
-      // درخت ساده‌ی جایگزین
-      const trunkGeo = new THREE.CylinderGeometry(0.09, 0.13, 0.8, 6);
-      trunkGeo.translate(0, 0.4, 0);
-      const crownGeo = new THREE.IcosahedronGeometry(0.85, 1);
-      crownGeo.translate(0, 1.55, 0);
-      const trunks = new THREE.InstancedMesh(trunkGeo, new THREE.MeshStandardMaterial({ color: 0x7a4a26 }), spots.length);
-      const crowns = new THREE.InstancedMesh(crownGeo, new THREE.MeshStandardMaterial({ color: 0x4d9440 }), spots.length);
+    }));
+    if (!anyModel) {
+      // جایگزین: درخت‌های کاجی ساده
+      const trunkG = new THREE.CylinderGeometry(0.07, 0.1, 0.5, 6);
+      const crownG = new THREE.ConeGeometry(0.55, 1.4, 8);
+      const trunkM = new THREE.MeshLambertMaterial({ color: 0x7a5a3e });
+      const crownM = new THREE.MeshLambertMaterial({ color: 0x4e8c3f });
+      const trunks = new THREE.InstancedMesh(trunkG, trunkM, spots.length);
+      const crowns = new THREE.InstancedMesh(crownG, crownM, spots.length);
       spots.forEach(([x, z], i) => {
-        const s = 0.9 + rand() * 0.6;
-        m4.compose(new THREE.Vector3(x, 0.03, z), q.identity(), new THREE.Vector3(s, s, s));
-        trunks.setMatrixAt(i, m4);
-        crowns.setMatrixAt(i, m4);
+        dummy.rotation.set(0, 0, 0);
+        dummy.scale.setScalar(0.9 + ((i * 17) % 10) * 0.06);
+        dummy.position.set(x, 0.25, z);
+        dummy.updateMatrix();
+        trunks.setMatrixAt(i, dummy.matrix);
+        dummy.position.set(x, 1.05, z);
+        dummy.updateMatrix();
+        crowns.setMatrixAt(i, dummy.matrix);
       });
       this.group.add(trunks, crowns);
     }
 
-    // چراغ‌های خیابان دور هسته
-    const poleGeo = new THREE.CylinderGeometry(0.045, 0.06, 1.9, 6);
-    poleGeo.translate(0, 0.95, 0);
-    const headGeo = new THREE.SphereGeometry(0.13, 8, 6);
-    headGeo.translate(0, 1.95, 0);
-    const lampSpots = [];
-    for (const line of [-1.5, -0.5, 0.5, 1.5]) {
-      for (let t = -2.5; t <= 2.5; t++) {
-        lampSpots.push([line * P + (R / 2 + 0.45), t * P + P / 2]);
-        lampSpots.push([t * P + P / 2, line * P - (R / 2 + 0.45)]);
+    // چراغ‌های خیابان
+    const poleG = new THREE.CylinderGeometry(0.045, 0.06, 1.9, 6);
+    const headG = new THREE.SphereGeometry(0.13, 8, 6);
+    const poleM = new THREE.MeshLambertMaterial({ color: 0x3f4652 });
+    const headM = new THREE.MeshBasicMaterial({ color: 0xfff3c4 });
+    const lampAt = [];
+    for (const l of [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5]) {
+      for (const m of [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5]) {
+        lampAt.push([l * P + R / 2 + 0.5, m * P + R / 2 + 0.5]);
+        lampAt.push([l * P - R / 2 - 0.5, m * P - R / 2 - 0.5]);
       }
     }
-    const poles = new THREE.InstancedMesh(poleGeo, new THREE.MeshStandardMaterial({ color: 0x3a3f45 }), lampSpots.length);
-    const heads = new THREE.InstancedMesh(headGeo, new THREE.MeshBasicMaterial({ color: 0xffe9a8 }), lampSpots.length);
-    lampSpots.forEach(([x, z], i) => {
-      m4.makeTranslation(x, 0.06, z);
-      poles.setMatrixAt(i, m4);
-      heads.setMatrixAt(i, m4);
+    const poles = new THREE.InstancedMesh(poleG, poleM, lampAt.length);
+    const heads = new THREE.InstancedMesh(headG, headM, lampAt.length);
+    lampAt.forEach(([x, z], i) => {
+      dummy.rotation.set(0, 0, 0);
+      dummy.scale.setScalar(1);
+      dummy.position.set(x, 0.95, z);
+      dummy.updateMatrix();
+      poles.setMatrixAt(i, dummy.matrix);
+      dummy.position.set(x, 1.95, z);
+      dummy.updateMatrix();
+      heads.setMatrixAt(i, dummy.matrix);
     });
     this.group.add(poles, heads);
   }
@@ -581,56 +621,85 @@ export class City {
   }
 
   async _buildCars() {
-    const { P, R } = this;
-    const lane = R / 4 + 0.15;
-    const loops = [
-      { h: 0.5 * P, dir: 1 }, { h: 0.5 * P, dir: -1 },
-      { h: 1.5 * P, dir: 1 }, { h: 1.5 * P, dir: -1 },
-      { h: 2.5 * P, dir: 1 }, { h: 2.5 * P, dir: -1 },
+    const { P, B } = this;
+    const loops = [0.5 * P, 1.5 * P, 2.5 * P, 3.5 * P];
+    const SPEED = (n) => (/kart/.test(n) ? 7 + rand() * 2.5
+      : /race/.test(n) ? 8.5 + rand() * 2.5
+      : /tractor/.test(n) ? 2.6
+      : /truck|van|firetruck|garbage|delivery|suv/.test(n) ? 3.6 + rand() * 1.3
+      : 4.6 + rand() * 2.4);
+    const TWICE = new Set(['sedan', 'taxi', 'suv', 'hatchback-sports', 'van', 'sedan-sports']);
+    // ماشین موضوعی جلوی هر ساختمان اصلی
+    const THEMED = [
+      { car: 'ambulance', col: -1, row: -1, dx: -2.4 },     // جلوی بیمارستان دکتر نیلا
+      { car: 'police', col: 1, row: -1, dx: 2.4 },          // جلوی شورای شهر
+      { car: 'firetruck', col: 0, row: 0, dx: 3.6 },        // جلوی تالار اصلی
+      { car: 'taxi', col: 1, row: 0, dx: -2.6 },            // جلوی سینما
+      { car: 'garbage-truck', col: -1, row: 0, dx: 3.2 },   // کنار کلاب ورزشی
+      { car: 'race', col: 0, row: 1, dx: 3.4 },             // جلوی لیدربرد
+      { car: 'delivery', col: 1, row: 1, dx: -2.8 },        // جلوی خونه یوزر
+      { car: 'tractor', col: -1, row: 1, dx: 3.6 },         // کنار باغچه
     ];
-    const parkedSpots = [
-      { x: -6.5, z: 0.5 * P + R / 2 - 0.85, rot: Math.PI / 2 },
-      { x: 5.2, z: 0.5 * P + R / 2 - 0.85, rot: Math.PI / 2 },
-      { x: 0.5 * P + R / 2 - 0.85, z: -4.5, rot: 0 },
-    ];
-    let idx = 0;
-    await Promise.allSettled(CITY.cars.map(async (name) => {
+
+    const scenes = {};
+    const makeCar = (scene, name, i) => {
+      const obj = this._normalized(scene.clone(true), /kart/.test(name) ? 1.15 : 1.7, 9);
+      obj.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(obj);
+      const inner = new THREE.Group();
+      inner.add(obj);
+      obj.position.set(-(box.min.x + box.max.x) / 2, -box.min.y, -(box.min.z + box.max.z) / 2);
+      const wheels = [];
+      inner.traverse((o) => { if ((o.name || '').startsWith('wheel')) wheels.push(o); });
+      const g = new THREE.Group();
+      g.add(inner);
+      this.group.add(g);
+      const h = /kart/.test(name) ? loops[0] : loops[i % loops.length];
+      const per = 8 * h;
+      this.cars.push({
+        obj: g, wheels, h,
+        dist: per / CITY.cars.length * i + rand() * 6,
+        angle: 0,
+        speed: SPEED(name),
+        dir: i % 2 === 0 ? 1 : -1,
+        lane: this.R / 4 - 0.12,
+      });
+    };
+    const makeParked = (scene, x, z, rot) => {
+      const obj = this._normalized(scene.clone(true), 1.7, 9);
+      obj.position.set(x, 0.05, z);
+      obj.rotation.y = rot;
+      this.group.add(obj);
+      this._blob(x, z, 2.2, 3.4);
+    };
+
+    await Promise.allSettled(CITY.cars.map(async (name, i) => {
       let scene = null;
       try { scene = await this._loadGLB(CITY.carBase + name + '.glb'); } catch (e) { return; }
-      const i = idx++;
-      const wrap = this._makeCar(scene, name);
-      this._blob(0, 0, 1.5, 2.6, wrap);
-      this.group.add(wrap);
-      const loop = loops[i % loops.length];
-      const per = 8 * loop.h;
-      this.cars.push({
-        obj: wrap, h: loop.h, dir: loop.dir, lane,
-        dist: (per * (0.17 * i + 0.05)) % per,
-        speed: 4.2 + rand() * 2.6,
-        angle: 0,
-      });
-      // چند ماشین پارک‌شده کنار خیابان‌های هسته
-      if (i < parkedSpots.length) {
-        const parked = this._makeCar(scene, name);
-        parked.position.set(parkedSpots[i].x, 0.07, parkedSpots[i].z);
-        parked.rotation.y = parkedSpots[i].rot;
-        this._blob(0, 0, 1.5, 2.6, parked);
-        this.group.add(parked);
-      }
+      scenes[name] = scene;
+      makeCar(scene, name, i);
+      if (TWICE.has(name)) makeCar(scene, name, i + 3 + CITY.cars.length);
     }));
 
-    // مخروط‌های ترافیکی پکیج جلوی سینما و کلاب
+    for (const t of THEMED) {
+      if (!scenes[t.car]) continue;
+      makeParked(scenes[t.car], t.col * P + t.dx, t.row * P + B / 2 - 1.6, t.dx > 0 ? -0.1 : 0.1);
+    }
+    if (scenes.sedan) {
+      makeParked(scenes.sedan, -2 * P - 3.6, -P + B / 2 - 1.4, 0.08);
+      makeParked(scenes.sedan, 2 * P + 3.6, 2 * P + B / 2 - 1.4, -0.06);
+    }
+    if (scenes.van) makeParked(scenes.van, 3 * P - 3.2, -3 * P + B / 2 - 1.4, Math.PI + 0.05);
+
+    // مخروط‌های راهنمایی از پکیج ماشین
     try {
       const cone = await this._loadGLB(CITY.carBase + 'cone.glb');
-      const spots = [
-        [P - 2.2, 3.4], [P - 0.6, 3.9], [P + 1.2, 3.5],
-        [-P + 1.8, 3.6], [-P + 3.2, 3.2],
-      ];
-      for (const [x, z] of spots) {
-        const m = this._normalized(cone.clone(true), 0.34, 0.55);
-        m.position.set(x, 0.06, z);
-        this.group.add(m);
-      }
+      [[0.5 * P + 1.1, -0.5 * P], [0.5 * P + 1.1, -0.5 * P + 1.3], [-1.5 * P - 1.1, 0.5 * P], [-1.5 * P - 1.1, 0.5 * P - 1.3]]
+        .forEach(([x, z]) => {
+          const o = this._normalized(cone.clone(true), 0.34, 9);
+          o.position.set(x, 0.05, z);
+          this.group.add(o);
+        });
     } catch (e) { /* ok */ }
   }
 
@@ -665,12 +734,13 @@ export class City {
     const { P, B } = this;
     const inset = B / 2 - 0.85;
     const loops = [
-      { cx: 0, cz: 0, h: P + inset, n: 9 },
-      { cx: 0, cz: 0, h: inset, n: 3 },
-      { cx: -P, cz: P, h: inset, n: 3 },
-      { cx: P, cz: 0, h: inset, n: 2 },
-      { cx: P, cz: -P, h: inset, n: 2 },
-      { cx: 0, cz: 0, h: 2 * P + inset, n: 6 },
+      { cx: 0, cz: 0, h: P + inset, n: 13 },
+      { cx: 0, cz: 0, h: inset, n: 5 },
+      { cx: -P, cz: P, h: inset, n: 5 },
+      { cx: P, cz: 0, h: inset, n: 4 },
+      { cx: P, cz: -P, h: inset, n: 4 },
+      { cx: -P, cz: -P, h: inset, n: 4 },
+      { cx: 0, cz: 0, h: 2 * P + inset, n: 9 },
     ];
     for (const L of loops) {
       for (let i = 0; i < L.n; i++) {

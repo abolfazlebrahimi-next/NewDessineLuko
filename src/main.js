@@ -1,4 +1,5 @@
 // ================= شهر لوکو — نقطه‌ی شروع =================
+import * as THREE from 'three';
 import { World } from './world.js';
 import { UI } from './ui.js';
 import { City } from './city.js';
@@ -116,7 +117,9 @@ const finishPointer = (e) => {
       const b = LAYOUT.buildings.find(x => x.id === id);
       if (b) {
         sfx.click();
-        world.focusOn(mesh.position.x, mesh.position.z + 1.6, 1.05);
+        const wp = new THREE.Vector3();
+        mesh.getWorldPosition(wp); // شهر ۴۵ درجه چرخیده
+        world.focusOn(wp.x, wp.z + 1.6, 1.05);
         ui.openBuilding(b);
       }
     }

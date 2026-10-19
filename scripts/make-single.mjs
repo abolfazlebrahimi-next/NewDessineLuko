@@ -61,6 +61,7 @@ const wanted = (rel) =>
   rel.startsWith('models/city/') ||
   rel.startsWith('models/cars/') ||
   rel === 'models/nature/tree.glb' ||
+  rel === 'models/nature/tree-tall.glb' ||
   rel.startsWith('models/nature/Textures/') ||
   WANTED_ASSETS.has(rel) ||
   /^assets\/city-[^/]+\.png$/.test(rel);

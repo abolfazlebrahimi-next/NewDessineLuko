@@ -14,7 +14,7 @@ const isGLB = (p) => existsSync(p) && statSync(p).size > 4000 &&
 check('همه‌ی ساختمان‌های پرکننده (Kenney City Kit) سالم‌اند',
   CITY.filler.every(n => isGLB(`public/models/city/${n}.glb`)));
 check('مدل‌های جانبی شهر (برج آب/کانتینر/تانک) سالم‌اند',
-  ['water-tower', 'detail-tank', 'shipping-container-a', 'shipping-container-b']
+  ['water-tower', 'detail-tank', 'detail-tank-large', 'shipping-container-a', 'shipping-container-b', 'shipping-container-c', 'chimney-basic', 'solar-panel-flat', 'windmill']
     .every(n => isGLB(`public/models/city/${n}.glb`)));
 check('همه‌ی ماشین‌ها (Kenney Car Kit) سالم‌اند',
   CITY.cars.every(n => isGLB(`public/models/cars/${n}.glb`)));

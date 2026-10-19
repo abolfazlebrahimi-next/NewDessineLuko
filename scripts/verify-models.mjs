@@ -72,6 +72,7 @@ for (const dir of ['public/models/city', 'public/models/cars']) {
   }
 }
 map['models/nature/tree.glb'] = `data:model/gltf-binary;base64,${readFileSync('public/models/nature/tree.glb').toString('base64')}`;
+map['models/nature/tree-tall.glb'] = `data:model/gltf-binary;base64,${readFileSync('public/models/nature/tree-tall.glb').toString('base64')}`;
 map['models/nature/Textures/colormap.png'] = `data:image/png;base64,${readFileSync('public/models/nature/Textures/colormap.png').toString('base64')}`;
 globalThis.__ASSET_MAP__ = map;
 
@@ -100,9 +101,15 @@ fakeWorld.scene.traverse((o) => {
 });
 check(`صحنه پر است (${meshes} مش، ${instanced} اینستنس)`, meshes > 120);
 check(`مش‌های بافت‌دار مدل‌های Kenney در صحنه‌اند (${textured})`, textured > 40);
-check(`همه‌ی ماشین‌های پکیج در حال ترددند (${city.cars.length})`, city.cars.length >= 14);
-check(`آدمک‌ها در شهرند (${city.peds.length})`, city.peds.length >= 25);
+check(`همه‌ی ماشین‌های پکیج در حال ترددند (${city.cars.length})`, city.cars.length >= 24);
+check(`آدمک‌ها در شهرند (${city.peds.length})`, city.peds.length >= 40);
 check('برچسب ۸ ساختمان اصلی ساخته شد', city.labels.length === 8);
+{
+  city.group.updateMatrixWorld(true);
+  const w = city.group.localToWorld(new THREE.Vector3(10, 0, 4));
+  const mine = city._toWorld(10, 4);
+  check('تبدیل مختصات شهر چرخیده درست است', Math.abs(w.x - mine.x) < 1e-6 && Math.abs(w.z - mine.z) < 1e-6);
+}
 
 // یک فریم آپدیت بدون خطا
 try {

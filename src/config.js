@@ -13,8 +13,8 @@ export const ASSET = (f) => assetUrl(`assets/${f}`);
 // (بینشان جنگل است و بعداً می‌شود جاده کشید). کلیک روی ساختمان مزرعه یا
 // دکمه‌ی کنار صفحه هم با ابرها سریع جابجایت می‌کند.
 export const MAP_BOUNDS = {
-  minX: -62, maxX: 62, minZ: -62, maxZ: 62,
-  panMinX: -46, panMaxX: 46, panMinZ: -46, panMaxZ: 46, // محدوده‌ی حرکت دوربین روی شهر
+  minX: -84, maxX: 84, minZ: -84, maxZ: 84,
+  panMinX: -58, panMaxX: 58, panMinZ: -58, panMaxZ: 58, // محدوده‌ی حرکت دوربین روی شهر (لوزی)
 };
 
 // ---------- شهر لوکو: شبکه‌ی بلوک‌ها، ساختمان‌های اصلی، مدل‌های Kenney ----------
@@ -34,7 +34,9 @@ export const CITY = {
   cars: [             // ماشین‌های در حال تردد (Kenney Car Kit)
     'sedan', 'sedan-sports', 'hatchback-sports', 'taxi', 'police',
     'ambulance', 'firetruck', 'garbage-truck', 'van', 'suv',
-    'suv-luxury', 'truck', 'delivery', 'race',
+    'suv-luxury', 'truck', 'delivery', 'race', 'race-future',
+    'kart-oobi', 'kart-oodi', 'kart-ooli', 'kart-oopi', 'kart-oozi',
+    'tractor',
   ],
 };
 
