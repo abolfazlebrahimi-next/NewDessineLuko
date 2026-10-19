@@ -7,8 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node tests/test-game.mjs && node tests/test-build.mjs && node tests/test-ui.mjs && node tests/test-boot.mjs",
-    "build:single": "vite build --config vite.config.single.mjs && node scripts/make-single.mjs && node scripts/verify-single.mjs"
+    "test": "node tests/test-game.mjs && node tests/test-build.mjs && node tests/test-ui.mjs && node tests/test-boot.mjs && node scripts/verify-models.mjs",
+    "build:single": "vite build --config vite.config.single.mjs && node scripts/make-single.mjs && node scripts/verify-single.mjs && node scripts/verify-models.mjs"
   },
   "repository": {
     "type": "git",

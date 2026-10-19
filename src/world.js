@@ -7,7 +7,7 @@ const VIEW_HEIGHT = 18.5;      // ارتفاع دید ارتوگرافیک
 const CAM_POS = new THREE.Vector3(0, 13.5, 11.8);
 const CAM_TARGET = new THREE.Vector3(0, 0, 0);
 // زوم متعادل: نه خیلی نزدیک، نه خیلی دور — همیشه بشود مدیریت کرد
-const ZOOM_MIN = 0.5;
+const ZOOM_MIN = 0.36;
 const ZOOM_MAX = 1.6;
 
 export class World {
