@@ -14,8 +14,8 @@ const ui = new UI(world);
 const city = new City(world, ui);
 city.init().catch((e) => console.warn('city:', e));
 
-// نمای آغازین: هسته‌ی شهر از کمی دورتر
-world.focusOn(0, 1.5, 0.6);
+// نمای آغازین: هسته‌ی شهر از کمی دورتر (روی موبایل عمودی بازتر)
+world.focusOn(0, 1.5, window.innerWidth / Math.max(1, window.innerHeight) > 1.15 ? 0.55 : 0.42);
 
 // ---------- حلقه‌ی بازی ----------
 let last = performance.now();
