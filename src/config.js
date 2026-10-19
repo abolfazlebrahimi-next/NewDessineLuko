@@ -13,8 +13,29 @@ export const ASSET = (f) => assetUrl(`assets/${f}`);
 // (بینشان جنگل است و بعداً می‌شود جاده کشید). کلیک روی ساختمان مزرعه یا
 // دکمه‌ی کنار صفحه هم با ابرها سریع جابجایت می‌کند.
 export const MAP_BOUNDS = {
-  minX: -19, maxX: 19, minZ: -9.5, maxZ: 93.5,     // محدوده‌ی مجاز ساخت‌وساز و جابجایی
-  panMinX: -16, panMaxX: 16, panMinZ: -6, panMaxZ: 87, // محدوده‌ی حرکت دوربین روی کل نقشه
+  minX: -62, maxX: 62, minZ: -62, maxZ: 62,
+  panMinX: -46, panMaxX: 46, panMinZ: -46, panMaxZ: 46, // محدوده‌ی حرکت دوربین روی شهر
+};
+
+// ---------- شهر لوکو: شبکه‌ی بلوک‌ها، ساختمان‌های اصلی، مدل‌های Kenney ----------
+export const CITY = {
+  pitch: 15.6,        // فاصله‌ی مرکز بلوک‌ها
+  block: 11,          // اندازه‌ی هر بلوک
+  road: 4.6,          // پهنای خیابان
+  range: 3,           // بلوک‌ها از ۳- تا ۳ (۷×۷)؛ هسته‌ی اصلی ۳×۳ وسط است
+  cityBase: 'models/city/',
+  carBase: 'models/cars/',
+  filler: [           // ساختمان‌های پرکننده‌ی دور شهر (Kenney City Kit)
+    'building-a', 'building-b', 'building-c', 'building-d', 'building-e',
+    'building-f', 'building-g', 'building-h', 'building-i', 'building-j',
+    'building-k', 'building-l', 'building-m', 'building-n', 'building-o',
+    'building-p', 'building-q', 'building-r', 'building-s', 'building-t',
+  ],
+  cars: [             // ماشین‌های در حال تردد (Kenney Car Kit)
+    'sedan', 'sedan-sports', 'hatchback-sports', 'taxi', 'police',
+    'ambulance', 'firetruck', 'garbage-truck', 'van', 'suv',
+    'suv-luxury', 'truck', 'delivery', 'race',
+  ],
 };
 
 export const AREAS = {
@@ -246,35 +267,52 @@ export function isBuildItem(itemId) {
 export const LAYOUT = {
   buildings: [
     {
-      id: 'hall', name: 'تالار بازی', tex: 'AmusementPark.png',
-      x: 0, z: -3.2, w: 7.6,
-      desc: 'قلب شهر لوکو! هر روز جایزه‌ی روزانه‌ات را از اینجا بگیر.',
-      action: { label: 'جایزه روزانه', coins: 500, xp: 20, cooldown: 300 },
+      id: 'hall', name: 'تالار اصلی شهر', tex: 'city-hall.png',
+      col: 0, row: 0, w: 10.4,
+      desc: 'قلب شهر لوکو! جایزه‌ی روزانه‌ات را از تالار اصلی بگیر.',
+      action: { label: 'جایزه روزانه', coins: 400, xp: 20, cooldown: 300 },
     },
     {
-      id: 'hospital', name: 'بیمارستان دکتر نیلا', tex: 'Hospital.png',
-      x: -10.5, z: -3.4, w: 5.4,
-      desc: 'دکتر نیلا همیشه به فکر مردم شهر است. هر چند وقت شبنم هدیه می‌دهد.',
-      action: { label: 'دریافت کمک', dew: 10, xp: 10, cooldown: 90 },
+      id: 'clinic', name: 'مطب دکتر نیلا', tex: 'city-clinic.png',
+      col: -1, row: -1, w: 7.4,
+      desc: 'مطب گرم و صمیمی دکتر نیلا؛ همیشه به فکر سلامتی مردم شهر است و شبنم هدیه می‌دهد.',
+      action: { label: 'دریافت کمک', dew: 12, xp: 10, cooldown: 90 },
     },
     {
-      id: 'gym', name: 'باشگاه لوکو', tex: 'ClubLuko.png',
-      x: 10.5, z: -3.4, w: 5.4,
-      desc: 'در باشگاه لوکو تمرین کن و تجربه بگیر تا سریع‌تر لول آپ کنی!',
+      id: 'council', name: 'ساختمان شورای شهر لوکو', tex: 'city-council.png',
+      col: 1, row: -1, w: 9.6,
+      desc: 'اینجا برای آینده‌ی شهر تصمیم گرفته می‌شود؛ بودجه‌ی شهر را از شورا بگیر.',
+      action: { label: 'بودجه شهر', coins: 220, xp: 15, cooldown: 180 },
+    },
+    {
+      id: 'cinema', name: 'سینما', tex: 'city-cinema.png',
+      col: 1, row: 0, w: 9.2,
+      desc: 'سینمای لوکو با فرش قرمز معروفش! فیلم ببین و تجربه بگیر.',
+      action: { label: 'تماشای فیلم', xp: 35, cooldown: 120 },
+    },
+    {
+      id: 'gym', name: 'کلاب ورزشی', tex: 'city-gym.png',
+      col: -1, row: 0, w: 9.4,
+      desc: 'کلاب ورزشی لوکو؛ تمرین کن تا سریع‌تر لول‌آپ کنی!',
       action: { label: 'تمرین', xp: 45, cooldown: 60 },
     },
     {
-      id: 'mechanic', name: 'مکانیکی', tex: 'Mechanic.png',
-      x: -10.8, z: 1.4, w: 4.9,
-      desc: 'مکانیک شهر ابزارها را تعمیر می‌کند و بابت کارش سکه می‌دهد.',
-      action: { label: 'کار روزانه', coins: 180, xp: 10, cooldown: 90 },
+      id: 'garden', name: 'باغچه', tex: 'Tree2.png',
+      col: -1, row: 1, w: 0,
+      desc: 'باغچه‌ی آرام شهر با فواره و نیمکت‌های چوبی؛ گل‌ها را آبیاری کن.',
+      action: { label: 'آبیاری باغچه', dew: 8, xp: 8, cooldown: 90 },
     },
     {
-      id: 'farm', name: 'مزرعه', tex: 'Farm.png',
-      x: 10.8, z: 1.4, w: 4.9,
-      desc: 'ورودی مزرعه‌ی لوکو! رویش کلیک کن تا ابرها بیایند و بروی به فضای مخصوص مزرعه؛ آنجا زمین زیر جنگل است و باید با سکه پاکش کنی.',
-      action: null,
-      portal: 'farm', // کلیک روی این ساختمان = انتقال ابری به صحنه‌ی مزرعه
+      id: 'leaderboard', name: 'تابلو لیدربرد', tex: 'city-leaderboard.png',
+      col: 0, row: 1, w: 3.1,
+      desc: 'تابلوی لیدربرد شهر لوکو؛ بهترین شهردارها اینجا معرفی می‌شوند!',
+      action: { label: 'جایزه رتبه', coins: 120, xp: 12, cooldown: 240 },
+    },
+    {
+      id: 'house', name: 'خونه یوزر', tex: 'city-house.png',
+      col: 1, row: 1, w: 6.9,
+      desc: 'خانه‌ی دنج تو در قلب شهر لوکو. استراحت کن و انرژی بگیر.',
+      action: { label: 'استراحت', coins: 90, xp: 10, cooldown: 120 },
     },
   ],
   // زمین کشت در صحنه‌ی جدا و مخصوص مزرعه است (جنوب نقشه، دور از شهر):

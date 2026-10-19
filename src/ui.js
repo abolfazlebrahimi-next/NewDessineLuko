@@ -70,8 +70,8 @@ export class UI {
         <button class="res-plus" id="dew-plus" aria-label="فروشگاه">+</button>
       </div>`;
     document.getElementById('overlay').appendChild(tr);
-    tr.querySelector('#coins-plus').addEventListener('click', () => this.safe(() => this.openShop()));
-    tr.querySelector('#dew-plus').addEventListener('click', () => this.safe(() => this.openShop('care')));
+    tr.querySelector('#coins-plus').addEventListener('click', () => this.safe(() => this.toast('فروشگاه به‌زودی برمی‌گردد')));
+    tr.querySelector('#dew-plus').addEventListener('click', () => this.safe(() => this.toast('فروشگاه به‌زودی برمی‌گردد')));
 
     // لبه‌ی چپ: دکمه‌های مربعی کرمی (پیام‌ها، دوستان، تنظیمات)
     const left = document.createElement('div');
@@ -92,21 +92,6 @@ export class UI {
     left.querySelector('#btn-friends').addEventListener('click', () => this.safe(() => this.openFriends()));
     left.querySelector('#btn-settings').addEventListener('click', () => this.safe(() => this.openSettings()));
 
-    // دو دکمه‌ی بزرگ گوشه‌های پایین (مثل نبرد/ساختن کلش): مزرعه چپ، فروشگاه راست
-    const ctas = document.createElement('div');
-    ctas.id = 'hud-ctas';
-    ctas.innerHTML = `
-      <button class="big-cta area-cta" id="btn-area">
-        <span class="cta-ico"><img src="${ASSET('Farm.png')}" alt="" draggable="false"></span>
-        <span id="btn-area-label">مزرعه</span>
-      </button>
-      <button class="big-cta shop-cta" id="btn-shop">
-        <span class="cta-ico">${SVG.shop}</span>
-        <span>فروشگاه</span>
-      </button>`;
-    document.getElementById('overlay').appendChild(ctas);
-    ctas.querySelector('#btn-area').addEventListener('click', () => this.safe(() => this.onAreaToggle && this.onAreaToggle()));
-    ctas.querySelector('#btn-shop').addEventListener('click', () => this.safe(() => this.openShop()));
   }
 
   // دکمه‌ی رفت‌وبرگشت بین شهر و مزرعه
@@ -363,39 +348,12 @@ export class UI {
   // فقط آیتم‌هایی که خریده‌ای و موجود داری اینجا می‌آیند؛
   // همه‌ی محصولات و چیزهای خریدنی داخل فروشگاه (دسته‌بندی‌شده) هستند.
   buildTray() {
-    const tray = document.createElement('div');
-    tray.id = 'tray';
-    // بدون فلش چپ/راست — با انگشت یا موس خودت بکش
-    tray.innerHTML = `<div class="tray-scroll" id="tray-scroll"></div>`;
-    document.getElementById('overlay').appendChild(tray);
-
-    this.trayScroll = tray.querySelector('#tray-scroll');
+    // فعلاً در محصول شهری سینی کارت نداریم
+    this.trayScroll = null;
     this._traySignature = null;
     this.placingItem = null;
     this._placeToastOff = null;
-
-    // با موس: غلتک = اسکرول افقی سینی؛ کشیدن روی فضای خالی سینی = اسکرول
-    this.trayScroll.addEventListener('wheel', (e) => {
-      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-        e.preventDefault();
-        this.trayScroll.scrollLeft += e.deltaY;
-      }
-    }, { passive: false });
-    let trayDrag = null;
-    this.trayScroll.addEventListener('pointerdown', (e) => {
-      if (e.target.closest('.card')) return; // روی کارت = درگ کارت
-      trayDrag = { x: e.clientX, left: this.trayScroll.scrollLeft };
-    });
-    this.trayScroll.addEventListener('pointermove', (e) => {
-      if (trayDrag) this.trayScroll.scrollLeft = trayDrag.left - (e.clientX - trayDrag.x);
-    });
-    const endTrayDrag = () => { trayDrag = null; };
-    this.trayScroll.addEventListener('pointerup', endTrayDrag);
-    this.trayScroll.addEventListener('pointercancel', endTrayDrag);
-
-    this.refreshTray();
   }
-
   refreshTray() {
     const scroll = this.trayScroll || document.getElementById('tray-scroll');
     if (!scroll) return;
@@ -906,7 +864,7 @@ export class UI {
           <input type="checkbox" id="sound-toggle" ${state.sound ? 'checked' : ''}>
         </label>
         <button class="danger-btn" id="reset-btn">شروع دوباره‌ی بازی</button>
-        <div class="about">شهر لوکو 🌳 — نسخه‌ی ۳.۰ (نقشه‌ی یکپارچه‌ی جنگلی، ساخت‌وساز و درگ گروهی، مسیریابی آدمک‌ها، موبایل)</div>
+        <div class="about">شهر لوکو 🌳 — نسخه‌ی ۴.۰ (شهر سه‌بعدی: ساختمان‌های اصلی، ماشین‌ها و آدمک‌های در حال رفت‌وآمد)</div>
       </div>
     `, 'panel-settings');
     panel.querySelector('.modal-close').addEventListener('click', () => this.safe(() => this.closeModal()));
@@ -929,7 +887,7 @@ export class UI {
       ? `<button class="building-action" id="building-action-btn" ${ready ? '' : 'disabled'}>
            ${ready ? building.action.label : `⏳ ${fmt(Math.ceil(left))} ثانیه`}
          </button>`
-      : `<button class="building-action" id="building-focus-btn">برو به مزرعه</button>`;
+      : '';
 
     const panel = this.openModal(`
       <div class="shop-header">

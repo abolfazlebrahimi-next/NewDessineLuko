@@ -62,8 +62,12 @@ tryIt('openMail (کلیک پیام‌ها)', () => ui.openMail());
 tryIt('closeModal', () => ui.closeModal());
 tryIt('openFriends (کلیک دوستان)', () => ui.openFriends());
 tryIt('closeModal', () => ui.closeModal());
-tryIt('openShop (کلیک فروشگاه)', () => ui.openShop());
-tryIt('closeModal', () => ui.closeModal());
+tryIt('سینی و دکمه‌های فروشگاه/مزرعه نیستند', () => {
+  if (document.querySelector('#tray')) throw new Error('tray هست');
+  if (document.querySelector('#btn-shop')) throw new Error('btn-shop هست');
+  if (document.querySelector('#btn-area')) throw new Error('btn-area هست');
+  if (!document.querySelector('#btn-mail')) throw new Error('btn-mail نیست');
+});
 tryIt('openSettings (کلیک تنظیمات)', () => ui.openSettings());
 tryIt('closeModal', () => ui.closeModal());
 for (const b of LAYOUT.buildings) {
@@ -71,7 +75,6 @@ for (const b of LAYOUT.buildings) {
   tryIt('closeModal', () => ui.closeModal());
 }
 tryIt('toast', () => ui.toast('تست'));
-tryIt('buyItem soil', () => ui.buyItem('soil'));
 tryIt('refreshAll', () => ui.refreshAll());
 
 setTimeout(() => {

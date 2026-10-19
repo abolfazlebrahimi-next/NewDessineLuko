@@ -52,9 +52,23 @@ async function imageDataUri(file) {
 
 const map = {};
 let beforeTotal = 0, afterTotal = 0;
+// فقط دارایی‌هایی که محصول فعلی (شهر) استفاده می‌کند وارد فایل تکی می‌شوند
+const WANTED_ASSETS = new Set([
+  'assets/coin.png', 'assets/Dew.png', 'assets/grass_tile.png',
+  'assets/AmusementPark.png', 'assets/Tree2.png',
+]);
+const wanted = (rel) =>
+  rel.startsWith('models/city/') ||
+  rel.startsWith('models/cars/') ||
+  rel === 'models/nature/tree.glb' ||
+  rel.startsWith('models/nature/Textures/') ||
+  WANTED_ASSETS.has(rel) ||
+  /^assets\/city-[^/]+\.png$/.test(rel);
+
 for (const file of walk('public')) {
   const rel = relative('public', file).split('\\').join('/');
   if (rel.startsWith('fonts/')) continue;
+  if (!wanted(rel)) continue;
   const ext = extname(file).toLowerCase();
   if (!MIME[ext]) continue;
   if (ext === '.png' || ext === '.jpg' || ext === '.jpeg') {

@@ -3,12 +3,12 @@ import * as THREE from 'three';
 import { ASSET, AREAS, MAP_BOUNDS } from './config.js';
 import { sharedManager } from './loader.js';
 
-const VIEW_HEIGHT = 15.2;      // ارتفاع دید ارتوگرافیک
+const VIEW_HEIGHT = 18.5;      // ارتفاع دید ارتوگرافیک
 const CAM_POS = new THREE.Vector3(0, 13.5, 11.8);
-const CAM_TARGET = new THREE.Vector3(0, 0, 2.2);
+const CAM_TARGET = new THREE.Vector3(0, 0, 0);
 // زوم متعادل: نه خیلی نزدیک، نه خیلی دور — همیشه بشود مدیریت کرد
-const ZOOM_MIN = 0.62;
-const ZOOM_MAX = 1.45;
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 1.6;
 
 export class World {
   constructor(canvas) {
@@ -65,13 +65,13 @@ export class World {
   _makeGround() {
     const grass = this.loader.load(ASSET('grass_tile.png'));
     grass.wrapS = grass.wrapT = THREE.RepeatWrapping;
-    grass.repeat.set(13, 24);
+    grass.repeat.set(30, 30);
     grass.colorSpace = THREE.SRGBColorSpace;
     const mat = new THREE.MeshBasicMaterial({ map: grass });
-    // یک زمین بزرگ که هر دو صحنه (شهر در شمال، مزرعه در جنوب دوردست) رویش هستند
-    this.ground = new THREE.Mesh(new THREE.PlaneGeometry(105, 190), mat);
+    // زمین بزرگ چمنی که شهر رویش ساخته می‌شود
+    this.ground = new THREE.Mesh(new THREE.PlaneGeometry(260, 260), mat);
     this.ground.rotation.x = -Math.PI / 2;
-    this.ground.position.set(0, 0, 42);
+    this.ground.position.set(0, 0, 0);
     this.ground.renderOrder = -1000;
     this.scene.add(this.ground);
 
@@ -88,21 +88,7 @@ export class World {
     this.patchMat = new THREE.MeshBasicMaterial({
       map: patchTex, transparent: true, depthWrite: false,
     });
-    for (const [x, z, s] of [
-      // صحنه‌ی شهر
-      [0, -3.0, 11], [-10.5, -3.4, 7], [10.5, -3.4, 7], [-10.8, 1.4, 6.5], [10.8, 1.4, 6.5],
-      [0, 1.4, 16],   // میدان وسط شهر
-      // صحنه‌ی مزرعه
-      [0, 76, 24],    // زمین کشت
-      [-8.6, 66.4, 8], // خانه‌ی مزرعه
-      [13.9, 75.5, 10], // آغل حیوانات
-    ]) {
-      const patch = new THREE.Mesh(new THREE.PlaneGeometry(s, s), this.patchMat);
-      patch.rotation.x = -Math.PI / 2;
-      patch.position.set(x, 0.01, z);
-      patch.renderOrder = -999;
-      this.scene.add(patch);
-    }
+    // (شهر خودش کف‌پوش و خیابان دارد)
   }
 
   _makeShadowTexture() {
@@ -165,13 +151,22 @@ export class World {
   /**
    * اسپریت ایستاده روی زمین (ساختمان/درخت/جایگاه)
    */
-  addSprite({ tag, file, texture = null, x, z, width, y = 0, clickable = true, anchorBottom = true }) {
+  addSprite({ tag, file, texture = null, x, z, width, y = 0, clickable = true, anchorBottom = true, depthTest = false }) {
     const tex = texture || this.texture(file);
     const mat = new THREE.SpriteMaterial({
-      map: tex, transparent: true, depthTest: false, depthWrite: false,
+      map: tex, transparent: true, depthTest, depthWrite: false,
     });
     const sp = new THREE.Sprite(mat);
     const aspect = tex.image && tex.image.width ? tex.image.width / tex.image.height : 1.5;
+    // اگر عکس هنوز لود نشده، وقتی آمد نسبت ابعاد واقعی را اعمال کن
+    if (tex.image && !tex.image.width && tex.image.addEventListener) {
+      tex.image.addEventListener('load', () => {
+        const a = tex.image.width / tex.image.height;
+        sp.scale.y = sp.scale.x / a;
+        sp.userData.aspect = a;
+        sp.userData.baseScale.copy(sp.scale);
+      }, { once: true });
+    }
     const h = width / aspect;
     sp.scale.set(width, h, 1);
     sp.center.set(0.5, anchorBottom ? 0 : 0.5);

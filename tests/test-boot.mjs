@@ -205,12 +205,11 @@ function clickCanvas(x, y) {
 }
 
 clickEl('#btn-mail');
-clickEl('#btn-shop');
 clickEl('#btn-friends');
 clickEl('#btn-settings');
 clickEl('#btn-mail');
 
-// کلیک وسط صفحه → احتمالاً تالار بازی
+// کلیک وسط صفحه → احتمالاً تالار اصلی شهر
 clickCanvas(512, 384);
 clickCanvas(200, 300);
 
