@@ -64,7 +64,7 @@ function walk(dir, out = []) {
   return out;
 }
 const map = {};
-for (const dir of ['public/models/city', 'public/models/cars', 'public/models/suburban', 'public/models/nature']) {
+for (const dir of ['public/models/city', 'public/models/cars', 'public/models/suburban', 'public/models/commercial', 'public/models/nature']) {
   for (const f of walk(dir)) {
     const rel = relative('public', f).split('\\').join('/');
     const mime = f.endsWith('.glb') ? 'model/gltf-binary' : f.endsWith('.png') ? 'image/png' : null;
@@ -103,6 +103,7 @@ fakeWorld.scene.traverse((o) => { if (o.isInstancedMesh) instancedCount += o.cou
 check(`صحنه پر است (${meshes} مش، ${instanced} اینستنس‌مش با ${instancedCount} نمونه)`, meshes > 120 && instancedCount > 400);
 check(`مش‌های بافت‌دار مدل‌های Kenney در صحنه‌اند (${textured})`, textured > 40);
 check(`خانه‌های محله‌ها از City Kit Suburban چیده شده‌اند (${city.suburbCount} قطعه)`, city.suburbCount >= 200);
+check(`مرکز شهر با City Kit Commercial ساخته شده (${city.commercialCount} ساختمان)`, city.commercialCount >= 50);
 check(`درخت‌های Survival Kit کاشته شده‌اند (${city.treeCount})`, city.treeCount >= 200);
 check(`همه‌ی ماشین‌های پکیج در حال ترددند (${city.cars.length})`, city.cars.length >= 24);
 check(`آدمک‌ها در شهرند (${city.peds.length})`, city.peds.length >= 40);

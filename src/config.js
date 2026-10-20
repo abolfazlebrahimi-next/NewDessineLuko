@@ -25,9 +25,19 @@ export const CITY = {
   range: 3,           // بلوک‌ها از ۳- تا ۳ (۷×۷)؛ هسته‌ی اصلی ۳×۳ وسط است
   cityBase: 'models/city/',          // Kenney City Kit (Industrial)
   suburbBase: 'models/suburban/',    // Kenney City Kit (Suburban)
+  commercialBase: 'models/commercial/', // Kenney City Kit (Commercial) — مرکز شهر و آسمان‌خراش‌ها
   natureBase: 'models/nature/',      // درخت/سنگ/علف از پکیج Kenney Survival Kit (همان پکیج محصول قبلی)
   carBase: 'models/cars/',           // Kenney Car Kit
   suburbScale: 3.0,                  // مقیاس یکنواخت خانه‌ها و وسایل حیاط
+  commercialScale: 2.7,              // مقیاس یکنواخت ساختمان‌های تجاری
+  shops: [            // ساختمان‌های تجاری/آپارتمانی مرکز شهر (Kenney City Kit Commercial)
+    'building-a', 'building-b', 'building-c', 'building-d', 'building-e', 'building-f',
+    'building-g', 'building-h', 'building-i', 'building-j', 'building-k',
+  ],
+  towers: [           // برج‌ها و آسمان‌خراش‌ها (ردیف پشتی شهر)
+    'building-l', 'building-m', 'building-skyscraper-a', 'building-skyscraper-b',
+    'building-skyscraper-c', 'building-skyscraper-d', 'building-skyscraper-e',
+  ],
   houses: [           // خانه‌های محله‌های مسکونی (Kenney City Kit Suburban)
     'building-type-a', 'building-type-b', 'building-type-c', 'building-type-d', 'building-type-e',
     'building-type-f', 'building-type-g', 'building-type-h', 'building-type-i', 'building-type-j',

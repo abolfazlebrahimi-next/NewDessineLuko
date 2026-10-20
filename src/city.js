@@ -1,6 +1,7 @@
 // ================= شهر لوکو =================
-// هسته‌ی شهر با ساختمان‌های اصلی (عکس‌های ایزومتریک)، دورش محله‌های مسکونی با خانه‌های
-// Kenney City Kit Suburban و حاشیه‌ی صنعتی با Kenney City Kit Industrial؛ خیابان‌ها،
+// هسته‌ی شهر با ساختمان‌های اصلی (عکس‌های ایزومتریک)، پشتش مرکز شهر و آسمان‌خراش‌های
+// Kenney City Kit Commercial، دورش محله‌های مسکونی با خانه‌های Kenney City Kit Suburban
+// و حاشیه‌ی صنعتی با Kenney City Kit Industrial؛ خیابان‌ها،
 // ماشین‌های Kenney Car Kit در حال تردد، درخت‌های پکیج Survival Kit و آدمک‌ها.
 //
 // نکته‌ی کارایی: همه‌ی خانه‌ها، وسایل حیاط، درخت‌ها و سایه‌ها به‌صورت InstancedMesh
@@ -85,8 +86,10 @@ export class City {
   }
 
   // نوع هر بلوک شهر
-  //  core: ساختمان اصلی | lawn: فضای سبز | suburb: محله‌ی مسکونی (Suburban)
-  //  industrial: حاشیه‌ی صنعتی (Industrial) | water/containers: بلوک‌های ویژه‌ی صنعتی
+  //  core: ساختمان اصلی | lawn: فضای سبز | commercial: مرکز شهر/آسمان‌خراش (Commercial)
+  //  suburb: محله‌ی مسکونی (Suburban) | industrial: حاشیه‌ی صنعتی (Industrial)
+  //  water/containers: بلوک‌های ویژه‌ی صنعتی
+  // چیدمان از دید دوربین (جنوب): جلو خانه‌ها، وسط ساختمان‌های اصلی، پشت مرکز شهر و خطِ آسمان
   blockKind(c, r) {
     const ring = Math.max(Math.abs(c), Math.abs(r));
     if (ring <= 1) {
@@ -95,9 +98,10 @@ export class City {
     }
     if (c === -3 && r === -3) return 'water';
     if (c === 3 && r === 3) return 'containers';
-    if (ring === 2) return 'suburb';
-    // حلقه‌ی بیرونی: شمال و شرق/غرب صنعتی، جنوب (نزدیک دوربین) مسکونی
-    return r >= 2 ? 'suburb' : 'industrial';
+    if (ring === 2) return r < 0 ? 'commercial' : 'suburb';
+    if (r === -3) return 'commercial';
+    if (r >= 2) return 'suburb';
+    return 'industrial';
   }
 
   async init() {
@@ -111,6 +115,7 @@ export class City {
     // مدل‌ها موازی و تدریجی می‌آیند تا شهر از همان ثانیه‌های اول پر شود
     const jobs = [
       this._buildSuburbs(),
+      this._buildCommercial(),
       this._buildIndustrial(),
       this._buildCars(),
       this._buildNature(),
@@ -167,7 +172,7 @@ export class City {
           g.fillStyle = 'rgba(230,226,214,.55)';
           g.fillRect(bx + bs / 2 - U(0.35), by + sw, U(0.7), bs - sw * 2);
         } else {
-          g.fillStyle = kind === 'core' ? '#ded7c5' : tones[Math.abs(col * 3 + row * 7) % 3];
+          g.fillStyle = kind === 'core' ? '#ded7c5' : kind === 'commercial' ? '#c7cbd3' : tones[Math.abs(col * 3 + row * 7) % 3];
           g.fillRect(bx, by, bs, bs);
           // کاشی‌بندی ملایم
           g.strokeStyle = 'rgba(100,102,95,.14)';
@@ -630,6 +635,80 @@ export class City {
       placed += items.length;
     }));
     this.suburbCount = placed;
+  }
+
+  // ---------- مرکز شهر و خط آسمان (Kenney City Kit Commercial) ----------
+  // هر بلوک دو ردیف ساختمان رو به خیابان‌های شمالی/جنوبی دارد که با پهنای واقعی مدل‌ها
+  // کنار هم چیده می‌شوند؛ ردیف پشتی شهر (شمال) برج و آسمان‌خراش می‌گیرد.
+  async _buildCommercial() {
+    const { P } = this;
+    const K = CITY.commercialScale;
+    const base = CITY.commercialBase;
+    const names = [...CITY.shops, ...CITY.towers];
+    const models = {};
+    await Promise.allSettled(names.map(async (n) => { models[n] = await this._model(base + n + '.glb'); }));
+    const have = (list) => list.filter((n) => models[n]);
+    const shops = have(CITY.shops), towers = have(CITY.towers);
+    if (!shops.length && !towers.length) return;
+
+    const plan = new Map();
+    const put = (name, it) => { if (!plan.has(name)) plan.set(name, []); plan.get(name).push(it); };
+    const blobs = [];
+    const tints = [0xffffff, 0xffffff, 0xffffff, 0xf4ebdc, 0xe4ebf3, 0xf1dfd6];
+    const HALF = 4.75;          // لبه‌ی ساختمان‌ها (داخل پیاده‌رو)
+    let placed = 0;
+
+    for (let c = -CITY.range; c <= CITY.range; c++) {
+      for (let r = -CITY.range; r <= CITY.range; r++) {
+        if (this.blockKind(c, r) !== 'commercial') continue;
+        const cx = c * P, cz = r * P;
+        const back = r === -CITY.range;              // ردیف پشتی شهر: برج‌ها
+        for (const face of [-1, 1]) {
+          // ردیف رو به خیابانِ face؛ از چپ به راست با پهنای واقعی پر می‌شود
+          let x = -HALF + 0.15 + rand() * 0.4;
+          let guard = 0;
+          while (x < HALF - 1.6 && guard++ < 12) {
+            const towerP = back ? (face < 0 ? 0.75 : 0.45) : (r === -2 && face < 0 ? 0.3 : 0.12);
+            const pool = rand() < towerP && towers.length ? towers : shops;
+            const name = pickOf(pool);
+            const m = models[name];
+            const w = m.size.x * K, d = Math.min(m.size.z * K, 4.6);
+            if (x + w > HALF + 0.2) { // جا نشد: یک مدل باریک‌تر امتحان کن
+              const slim = shops.map((n) => [n, models[n].size.x * K]).filter(([, ww]) => x + ww <= HALF + 0.2);
+              if (!slim.length) break;
+              const [n2] = pickOf(slim);
+              const m2 = models[n2];
+              const w2 = m2.size.x * K, d2 = Math.min(m2.size.z * K, 4.6);
+              const bx = cx + x + w2 / 2, bz = cz + face * (HALF - d2 / 2);
+              put(n2, { x: bx, z: bz, rot: face < 0 ? 0 : Math.PI, scale: K, tint: pickOf(tints) });
+              blobs.push([bx, bz, w2 * 1.1, d2 * 1.1]);
+              placed++;
+              break;
+            }
+            const bx = cx + x + w / 2, bz = cz + face * (HALF - d / 2);
+            put(name, { x: bx, z: bz, rot: face < 0 ? 0 : Math.PI, scale: K, tint: pickOf(tints) });
+            blobs.push([bx, bz, w * 1.1, d * 1.1]);
+            placed++;
+            x += w + 0.25 + rand() * 0.35;
+          }
+          // چتر آفتابی کافه روی پیاده‌رو جلوی مغازه‌ها
+          if (rand() < 0.6) {
+            const px = cx + (rand() - 0.5) * 7;
+            const pz = cz + face * (HALF + 0.45);
+            put(rand() < 0.5 ? 'detail-parasol-a' : 'detail-parasol-b', { x: px, z: pz, rot: rand() * 6.28, scale: K, y: 0.05 });
+            put(rand() < 0.5 ? 'detail-parasol-a' : 'detail-parasol-b', { x: px + 1.3, z: pz, rot: rand() * 6.28, scale: K, y: 0.05 });
+          }
+        }
+      }
+    }
+
+    this._blobs(blobs);
+    await Promise.allSettled([...plan.entries()].map(async ([name, items]) => {
+      const model = models[name] || await this._model(base + name + '.glb');
+      if (!model) return;
+      this._spawn(model, items);
+    }));
+    this.commercialCount = placed;
   }
 
   // ---------- حاشیه‌ی صنعتی (Kenney City Kit Industrial) ----------

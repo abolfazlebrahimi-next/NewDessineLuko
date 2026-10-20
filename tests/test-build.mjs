@@ -23,6 +23,9 @@ check('بافت colormap مدل‌های شهر و ماشین هست',
   existsSync('public/models/cars/Textures/colormap.png'));
 check('همه‌ی خانه‌های محله‌ها (Kenney City Kit Suburban) سالم‌اند',
   CITY.houses.length >= 20 && CITY.houses.every(n => isGLB(`public/models/suburban/${n}.glb`)));
+check('ساختمان‌های مرکز شهر و آسمان‌خراش‌ها (Kenney City Kit Commercial) سالم‌اند',
+  CITY.shops.length >= 10 && CITY.towers.length >= 5 &&
+  [...CITY.shops, ...CITY.towers, 'detail-parasol-a', 'detail-parasol-b'].every(n => isGLB(`public/models/commercial/${n}.glb`)));
 check('وسایل حیاط (ماشین‌رو/مسیر/نرده/گلدان) هست',
   ['driveway-long', 'path-short', 'path-stones-short', 'fence', 'planter']
     .every(n => isGLB(`public/models/suburban/${n}.glb`)));
@@ -30,7 +33,7 @@ check('درخت‌های پکیج Survival Kit (سبز و پاییزی) هست',
   CITY.trees.every(n => isGLB(`public/models/nature/${n}.glb`)) &&
   ['rock-a', 'rock-b', 'rock-c', 'grass', 'grass-large'].every(n => isGLB(`public/models/nature/${n}.glb`)));
 check('مدل‌ها فشرده‌اند (Meshopt) تا سریع لود شوند', (() => {
-  const files = ['public/models/city/building-a.glb', 'public/models/cars/sedan.glb', 'public/models/suburban/building-type-a.glb'];
+  const files = ['public/models/city/building-a.glb', 'public/models/cars/sedan.glb', 'public/models/suburban/building-type-a.glb', 'public/models/commercial/building-skyscraper-a.glb'];
   return files.every(f => readFileSync(f).toString('latin1', 0, 4000).includes('EXT_meshopt_compression') && statSync(f).size < 80000);
 })());
 

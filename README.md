@@ -17,8 +17,9 @@
 
 ## بقیه‌ی شهر
 
-- **حلقه‌ی دور هسته — محله‌های مسکونی:** هر بلوک ۴ قطعه با خانه‌های Kenney City Kit (Suburban) رو به خیابان، ماشین‌رو، مسیر پیاده، نرده‌ی چوبی، گلدان، درخت حیاط و گاهی ماشین پارک‌شده در ماشین‌رو.
-- **حلقه‌ی بیرونی — حاشیه‌ی صنعتی:** کارخانه‌ها و انبارهای Kenney City Kit (Industrial)، برج آب، کانتینر، مخزن، دودکش و پنل خورشیدی روی بام (ضلع جنوبی، نزدیک دوربین، مسکونی است).
+- **پشت هسته (شمال) — مرکز شهر و خط آسمان:** دو ردیف مغازه/آپارتمان Kenney City Kit (Commercial) رو به خیابان در هر بلوک با پهنای واقعی مدل‌ها کنار هم، چتر کافه روی پیاده‌رو؛ ردیف پشتی شهر برج و آسمان‌خراش می‌گیرد تا از دید دوربین خط آسمان بسازد بی‌آنکه جلوی هسته را بگیرد.
+- **جلوی هسته (جنوب) و دو طرف — محله‌های مسکونی:** هر بلوک ۴ قطعه با خانه‌های Kenney City Kit (Suburban) رو به خیابان، ماشین‌رو، مسیر پیاده، نرده‌ی چوبی، گلدان، درخت حیاط و گاهی ماشین پارک‌شده در ماشین‌رو.
+- **لبه‌های شرقی/غربی — حاشیه‌ی صنعتی:** کارخانه‌ها و انبارهای Kenney City Kit (Industrial)، برج آب، کانتینر، مخزن، دودکش و پنل خورشیدی روی بام.
 - **خیابان‌ها:** ۲۱ مدل Kenney Car Kit (تاکسی، پلیس، آمبولانس، آتش‌نشانی، کارت…) با چرخ‌های چرخان در چهار حلقه می‌چرخند؛ ماشین موضوعی جلوی هر ساختمان اصلی پارک است.
 - **فضای سبز:** درخت‌های سبز و پاییزی، سنگ و علف از پکیج Kenney Survival Kit (همان پکیج محصول قبلی) در کنار خیابان‌ها، حیاط‌ها، پارک‌ها و دور شهر.
 
@@ -50,6 +51,6 @@ node scripts/preview-render.mjs                          # پیش‌نمایش C
 - `src/config.js` — داده‌های شهر و ساختمان‌ها
 - `src/state.js` — ذخیره‌ی بازی و اقتصاد (سکه/شبنم محدود)
 - `src/loader.js` — لودر GLB مشترک با دیکودر Meshopt و نقشه‌ی دارایی بیلد تک‌فایل
-- `public/models/city` (Industrial)، `public/models/suburban` (Suburban)، `public/models/cars` (Car Kit)، `public/models/nature` (Survival Kit) — مدل‌های Kenney (لایسنس CC0، فایل `Kenney-License.txt`)
+- `public/models/city` (Industrial)، `public/models/commercial` (Commercial)، `public/models/suburban` (Suburban)، `public/models/cars` (Car Kit)، `public/models/nature` (Survival Kit) — مدل‌های Kenney (لایسنس CC0، فایل `Kenney-License.txt`)
 - `public/assets/city-*.webp` — تصاویر ساختمان‌های اصلی (اصل PNG در `assets-src/images`)
 - `assets-src/nature-pack-original` — پکیج اصلی Survival Kit (OBJ/FBX)؛ GLB درخت‌ها از همین ساخته شده
