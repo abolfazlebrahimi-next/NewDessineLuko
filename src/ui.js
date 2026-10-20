@@ -22,6 +22,7 @@ const SVG = {
   gear: `<svg viewBox="0 0 24 24" class="ico"><path fill="currentColor" d="M19.14 12.94a7.9 7.9 0 0 0 .06-.94 7.9 7.9 0 0 0-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.62l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.2 7.2 0 0 0-1.62-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96a.5.5 0 0 0-.6.22L2.7 8.86a.5.5 0 0 0 .12.62l2.03 1.58a7.9 7.9 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.62l1.92 3.32c.12.22.38.3.6.22l2.39-.96c.49.38 1.03.7 1.62.94l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54a7.2 7.2 0 0 0 1.62-.94l2.39.96c.22.08.48 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.62l-2.03-1.58ZM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2Z"/></svg>`,
   shop: `<svg viewBox="0 0 24 24" class="ico"><path fill="currentColor" d="M20 4H4v2h16V4zm1 10v-2l-1-5H4l-1 5v2h1v6h10v-6h4v6h2v-6h1zm-9 4H6v-4h6v4z"/></svg>`,
   mail: `<svg viewBox="0 0 24 24" class="ico"><path fill="currentColor" d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/></svg>`,
+  trophy: `<svg viewBox="0 0 24 24" class="ico"><path fill="currentColor" d="M19 4h-2V3a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v1H5a2 2 0 0 0-2 2v2a4 4 0 0 0 4 4h.3A5 5 0 0 0 11 15.9V18H8a1 1 0 0 0 0 2h8a1 1 0 0 0 0-2h-3v-2.1a5 5 0 0 0 3.7-3.9H17a4 4 0 0 0 4-4V6a2 2 0 0 0-2-2ZM5 8V6h2v4a2 2 0 0 1-2-2Zm14 0a2 2 0 0 1-2 2V6h2Z"/></svg>`,
   friends: `<svg viewBox="0 0 24 24" class="ico"><path fill="currentColor" d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>`,
 };
 
@@ -84,11 +85,19 @@ export class UI {
       <button class="side-btn" id="btn-friends">
         <span class="side-ico">${SVG.friends}</span><span>دوستان</span>
       </button>
+      <button class="side-btn" id="btn-leaderboard">
+        <span class="side-ico">${SVG.trophy}</span><span>لیدربرد</span>
+      </button>
       <button class="side-btn" id="btn-settings">
         <span class="side-ico">${SVG.gear}</span><span>تنظیمات</span>
       </button>`;
     document.getElementById('overlay').appendChild(left);
     left.querySelector('#btn-mail').addEventListener('click', () => this.safe(() => this.openMail()));
+    // تابلوی لیدربرد از روی نقشه برداشته شد؛ از اینجا باز می‌شود
+    left.querySelector('#btn-leaderboard').addEventListener('click', () => this.safe(() => {
+      const b = LAYOUT.buildings.find((x) => x.id === 'leaderboard');
+      if (b) { sfx.click(); this.openBuilding(b); }
+    }));
     left.querySelector('#btn-friends').addEventListener('click', () => this.safe(() => this.openFriends()));
     left.querySelector('#btn-settings').addEventListener('click', () => this.safe(() => this.openSettings()));
 

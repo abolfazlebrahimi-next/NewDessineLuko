@@ -21,16 +21,31 @@ check('همه‌ی ماشین‌ها (Kenney Car Kit) سالم‌اند',
 check('بافت colormap مدل‌های شهر و ماشین هست',
   existsSync('public/models/city/Textures/colormap.png') &&
   existsSync('public/models/cars/Textures/colormap.png'));
-check('مدل درخت برای فضای سبز شهر هست', isGLB('public/models/nature/tree.glb'));
+check('همه‌ی خانه‌های محله‌ها (Kenney City Kit Suburban) سالم‌اند',
+  CITY.houses.length >= 20 && CITY.houses.every(n => isGLB(`public/models/suburban/${n}.glb`)));
+check('وسایل حیاط (ماشین‌رو/مسیر/نرده/گلدان) هست',
+  ['driveway-long', 'path-short', 'path-stones-short', 'fence', 'planter']
+    .every(n => isGLB(`public/models/suburban/${n}.glb`)));
+check('درخت‌های پکیج Survival Kit (سبز و پاییزی) هست',
+  CITY.trees.every(n => isGLB(`public/models/nature/${n}.glb`)) &&
+  ['rock-a', 'rock-b', 'rock-c', 'grass', 'grass-large'].every(n => isGLB(`public/models/nature/${n}.glb`)));
+check('مدل‌ها فشرده‌اند (Meshopt) تا سریع لود شوند', (() => {
+  const files = ['public/models/city/building-a.glb', 'public/models/cars/sedan.glb', 'public/models/suburban/building-type-a.glb'];
+  return files.every(f => readFileSync(f).toString('latin1', 0, 4000).includes('EXT_meshopt_compression') && statSync(f).size < 80000);
+})());
 
-check('عکس ساختمان‌های اصلی PNG سالم‌اند', LAYOUT.buildings
+check('عکس ساختمان‌های اصلی (WebP سبک) سالم‌اند', LAYOUT.buildings
   .filter(b => b.tex.startsWith('city-'))
   .every(b => {
     const p = 'public/assets/' + b.tex;
     if (!existsSync(p)) return false;
-    const sig = readFileSync(p).slice(0, 8);
-    return sig[0] === 0x89 && sig[1] === 0x50 && sig[2] === 0x4e && sig[3] === 0x47;
+    const sig = readFileSync(p).slice(0, 12).toString('latin1');
+    return sig.startsWith('RIFF') && sig.slice(8, 12) === 'WEBP' && statSync(p).size < 120000;
   }));
+check('تابلوی لیدربرد روی نقشه نیست و بقیه‌ی ۷ ساختمان روی نقشه‌اند', (() => {
+  const lb = LAYOUT.buildings.find(b => b.id === 'leaderboard');
+  return lb && lb.onMap === false && LAYOUT.buildings.filter(b => b.onMap !== false).length === 7;
+})());
 
 // --- مسیر مستطیلی: شروع، جهت حرکت، خط راست/چپ، حلقه‌ی کامل ---
 {

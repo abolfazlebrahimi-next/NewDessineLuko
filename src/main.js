@@ -14,6 +14,7 @@ const world = new World(canvas);
 const ui = new UI(world);
 const city = new City(world, ui);
 city.init().catch((e) => console.warn('city:', e));
+ui.city = city;
 
 // نمای آغازین: هسته‌ی شهر از کمی دورتر (روی موبایل عمودی بازتر)
 world.focusOn(0, 1.5, window.innerWidth / Math.max(1, window.innerHeight) > 1.15 ? 0.55 : 0.42);
@@ -33,7 +34,13 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-window.__LUKO_BOOTED__ = true; // به صفحه‌ی لودینگ می‌گوید بازی بالا آمده
+// صفحه‌ی لودینگ تا آمدن ساختمان‌های اصلی می‌ماند (حداکثر چند ثانیه) تا شهر «نیمه‌کاره» دیده نشود؛
+// بقیه‌ی مدل‌ها (خانه‌ها، ماشین‌ها، درخت‌ها) تدریجی اضافه می‌شوند.
+const booted = () => { window.__LUKO_BOOTED__ = true; };
+Promise.race([
+  city.coreReady,
+  new Promise((r) => setTimeout(r, 6000)),
+]).then(booted, booted);
 
 // ================= ورودی: کشیدن نقشه، پینچ، کلیک روی ساختمان‌ها =================
 const activePointers = new Map();
@@ -118,7 +125,9 @@ const finishPointer = (e) => {
       if (b) {
         sfx.click();
         const wp = new THREE.Vector3();
-        mesh.getWorldPosition(wp); // شهر ۴۵ درجه چرخیده
+        // مرکز کفِ ساختمان (سایه‌ی تماس) — خود اسپریت کمی جلوتر لنگر دارد
+        if (mesh.userData.shadow) mesh.userData.shadow.getWorldPosition(wp);
+        else mesh.getWorldPosition(wp); // شهر ۴۵ درجه چرخیده
         world.focusOn(wp.x, wp.z + 1.6, 1.05);
         ui.openBuilding(b);
       }

@@ -9,6 +9,8 @@ const CAM_TARGET = new THREE.Vector3(0, 0, 0);
 // زوم متعادل: نه خیلی نزدیک، نه خیلی دور — همیشه بشود مدیریت کرد
 const ZOOM_MIN = 0.36;
 const ZOOM_MAX = 1.6;
+// زاویه‌ی دوربین نسبت به زمین (برای نشاندن اسپریت‌های ایزومتریک روی زمین لازم است)
+const CAM_PITCH_SIN = CAM_POS.y / Math.hypot(CAM_POS.y, CAM_POS.z);
 
 export class World {
   constructor(canvas) {
@@ -37,6 +39,7 @@ export class World {
     this.panTarget = new THREE.Vector3().copy(CAM_TARGET);
     this.zoom = 1;
     this.area = AREAS.town;      // صحنه‌ی فعلی: شهر یا مزرعه
+    this.pitchSin = CAM_PITCH_SIN;
 
     this._makeGround();
     this._makeShadowTexture();
@@ -60,6 +63,19 @@ export class World {
       this.texCache.set(file, t);
     }
     return this.texCache.get(file);
+  }
+
+  // بافت را کامل لود می‌کند (برای ساختمان‌های اصلی: تا عکس نیامده اسپریت ساخته نمی‌شود
+  // که با نسبت ابعاد غلط «پرش» نکند)
+  loadTexture(file) {
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = (t) => { if (!done) { done = true; resolve(t); } };
+      const t = this.loader.load(ASSET(file), () => finish(t), undefined, () => finish(t));
+      t.colorSpace = THREE.SRGBColorSpace;
+      this.texCache.set(file, t);
+      setTimeout(() => finish(t), 8000);
+    });
   }
 
   _makeGround() {
@@ -151,10 +167,11 @@ export class World {
   /**
    * اسپریت ایستاده روی زمین (ساختمان/درخت/جایگاه)
    */
-  addSprite({ tag, file, texture = null, x, z, width, y = 0, clickable = true, anchorBottom = true, depthTest = false }) {
+  addSprite({ tag, file, texture = null, x, z, width, y = 0, clickable = true, anchorBottom = true, depthTest = false, shadow = null }) {
     const tex = texture || this.texture(file);
     const mat = new THREE.SpriteMaterial({
       map: tex, transparent: true, depthTest, depthWrite: false,
+      alphaTest: 0.02,
     });
     const sp = new THREE.Sprite(mat);
     const aspect = tex.image && tex.image.width ? tex.image.width / tex.image.height : 1.5;
@@ -174,16 +191,22 @@ export class World {
     sp.renderOrder = 1000 + z * 10;
     sp.userData = { tag, type: tag.split(':')[0], id: tag, baseScale: sp.scale.clone(), aspect };
     this.scene.add(sp);
-    this.clickables.push(sp);
+    if (clickable) this.clickables.push(sp);
     this.byTag.set(tag, sp);
 
-    // سایه
+    // سایه‌ی تماس: دقیقاً زیر کفِ ساختمان (نه جلوی آن) تا روی زمین «بنشیند»
     const sh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({
       map: this.shadowTex, transparent: true, depthWrite: false, depthTest: false,
+      opacity: shadow && shadow.opacity != null ? shadow.opacity : 1,
     }));
     sh.rotation.x = -Math.PI / 2;
-    sh.scale.set(width * 0.85, width * 0.38, 1);
-    sh.position.set(x, 0.03, z + width * 0.12);
+    if (shadow) {
+      sh.scale.set(shadow.w, shadow.d, 1);
+      sh.position.set(shadow.x ?? x, 0.03, shadow.z ?? z);
+    } else {
+      sh.scale.set(width * 0.85, width * 0.38, 1);
+      sh.position.set(x, 0.03, z + width * 0.12);
+    }
     sh.renderOrder = 990 + z * 10;
     this.scene.add(sh);
     sp.userData.shadow = sh;

@@ -23,8 +23,20 @@ export const CITY = {
   block: 11,          // اندازه‌ی هر بلوک
   road: 4.6,          // پهنای خیابان
   range: 3,           // بلوک‌ها از ۳- تا ۳ (۷×۷)؛ هسته‌ی اصلی ۳×۳ وسط است
-  cityBase: 'models/city/',
-  carBase: 'models/cars/',
+  cityBase: 'models/city/',          // Kenney City Kit (Industrial)
+  suburbBase: 'models/suburban/',    // Kenney City Kit (Suburban)
+  natureBase: 'models/nature/',      // درخت/سنگ/علف از پکیج Kenney Survival Kit (همان پکیج محصول قبلی)
+  carBase: 'models/cars/',           // Kenney Car Kit
+  suburbScale: 3.0,                  // مقیاس یکنواخت خانه‌ها و وسایل حیاط
+  houses: [           // خانه‌های محله‌های مسکونی (Kenney City Kit Suburban)
+    'building-type-a', 'building-type-b', 'building-type-c', 'building-type-d', 'building-type-e',
+    'building-type-f', 'building-type-g', 'building-type-h', 'building-type-i', 'building-type-j',
+    'building-type-k', 'building-type-l', 'building-type-m', 'building-type-n', 'building-type-o',
+    'building-type-p', 'building-type-q', 'building-type-r', 'building-type-s', 'building-type-t',
+    'building-type-u',
+  ],
+  trees: ['tree', 'tree-tall', 'tree-autumn', 'tree-autumn-tall'],
+  half: 0,            // نصف پهنای ناحیه‌ی شهری (پایین‌تر محاسبه می‌شود)
   filler: [           // ساختمان‌های پرکننده‌ی دور شهر (Kenney City Kit)
     'building-a', 'building-b', 'building-c', 'building-d', 'building-e',
     'building-f', 'building-g', 'building-h', 'building-i', 'building-j',
@@ -39,6 +51,8 @@ export const CITY = {
     'tractor',
   ],
 };
+
+CITY.half = ((CITY.range * 2 + 1) * CITY.pitch + CITY.road) / 2;
 
 export const AREAS = {
   town: {
@@ -266,35 +280,36 @@ export function isBuildItem(itemId) {
 }
 
 // ---------- چیدمان شهر (پخش‌شده روی نقشه‌ی بزرگ) ----------
+// w: پهنای اسپریت؛ fd: نسبت ارتفاعِ لوزیِ کفِ ساختمان به پهنای عکس (برای نشاندن روی زمین)
 export const LAYOUT = {
   buildings: [
     {
-      id: 'hall', name: 'تالار اصلی شهر', tex: 'city-hall.png',
-      col: 0, row: 0, w: 9.4,
+      id: 'hall', name: 'تالار اصلی شهر', tex: 'city-hall.webp',
+      col: 0, row: 0, w: 9.4, fd: 0.5,
       desc: 'قلب شهر لوکو! جایزه‌ی روزانه‌ات را از تالار اصلی بگیر.',
       action: { label: 'جایزه روزانه', coins: 400, xp: 20, cooldown: 300 },
     },
     {
-      id: 'clinic', name: 'مطب دکتر نیلا', tex: 'city-clinic.png',
-      col: -1, row: -1, w: 6.9,
+      id: 'clinic', name: 'مطب دکتر نیلا', tex: 'city-clinic.webp',
+      col: -1, row: -1, w: 6.9, fd: 0.5,
       desc: 'مطب گرم و صمیمی دکتر نیلا؛ همیشه به فکر سلامتی مردم شهر است و شبنم هدیه می‌دهد.',
       action: { label: 'دریافت کمک', dew: 12, xp: 10, cooldown: 90 },
     },
     {
-      id: 'council', name: 'ساختمان شورای شهر لوکو', tex: 'city-council.png',
-      col: 1, row: -1, w: 8.9,
+      id: 'council', name: 'ساختمان شورای شهر لوکو', tex: 'city-council.webp',
+      col: 1, row: -1, w: 8.9, fd: 0.34,
       desc: 'اینجا برای آینده‌ی شهر تصمیم گرفته می‌شود؛ بودجه‌ی شهر را از شورا بگیر.',
       action: { label: 'بودجه شهر', coins: 220, xp: 15, cooldown: 180 },
     },
     {
-      id: 'cinema', name: 'سینما', tex: 'city-cinema.png',
-      col: 1, row: 0, w: 8.5,
+      id: 'cinema', name: 'سینما', tex: 'city-cinema.webp',
+      col: 1, row: 0, w: 8.5, fd: 0.5,
       desc: 'سینمای لوکو با فرش قرمز معروفش! فیلم ببین و تجربه بگیر.',
       action: { label: 'تماشای فیلم', xp: 35, cooldown: 120 },
     },
     {
-      id: 'gym', name: 'کلاب ورزشی', tex: 'city-gym.png',
-      col: -1, row: 0, w: 8.7,
+      id: 'gym', name: 'کلاب ورزشی', tex: 'city-gym.webp',
+      col: -1, row: 0, w: 8.7, fd: 0.34,
       desc: 'کلاب ورزشی لوکو؛ تمرین کن تا سریع‌تر لول‌آپ کنی!',
       action: { label: 'تمرین', xp: 45, cooldown: 60 },
     },
@@ -305,14 +320,14 @@ export const LAYOUT = {
       action: { label: 'آبیاری باغچه', dew: 8, xp: 8, cooldown: 90 },
     },
     {
-      id: 'leaderboard', name: 'تابلو لیدربرد', tex: 'city-leaderboard.png',
-      col: 0, row: 1, w: 3.1,
+      id: 'leaderboard', name: 'تابلو لیدربرد', tex: 'city-leaderboard.webp',
+      col: 0, row: 1, w: 3.1, onMap: false, // تابلو از روی نقشه برداشته شد (از دکمه‌ی HUD باز می‌شود)
       desc: 'تابلوی لیدربرد شهر لوکو؛ بهترین شهردارها اینجا معرفی می‌شوند!',
       action: { label: 'جایزه رتبه', coins: 120, xp: 12, cooldown: 240 },
     },
     {
-      id: 'house', name: 'خونه یوزر', tex: 'city-house.png',
-      col: 1, row: 1, w: 6.4,
+      id: 'house', name: 'خونه یوزر', tex: 'city-house.webp',
+      col: 1, row: 1, w: 6.4, fd: 0.5,
       desc: 'خانه‌ی دنج تو در قلب شهر لوکو. استراحت کن و انرژی بگیر.',
       action: { label: 'استراحت', coins: 90, xp: 10, cooldown: 120 },
     },

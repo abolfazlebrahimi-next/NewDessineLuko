@@ -161,6 +161,23 @@ global.Image = window.Image;
 global.Event = window.Event;
 global.PointerEvent = window.MouseEvent; // jsdom PointerEvent ندارد
 window.matchMedia = () => ({ matches: false, addListener() {}, removeListener() {} });
+// jsdom عکس واقعی لود نمی‌کند؛ setter طوری می‌شود که رویداد load بدهد (مثل مرورگر واقعی)
+Object.defineProperty(window.HTMLImageElement.prototype, 'src', {
+  configurable: true,
+  set(v) {
+    this._src = v;
+    setTimeout(() => {
+      try {
+        Object.defineProperty(this, 'width', { value: 256, configurable: true });
+        Object.defineProperty(this, 'height', { value: 256, configurable: true });
+        Object.defineProperty(this, 'naturalWidth', { value: 256, configurable: true });
+        Object.defineProperty(this, 'naturalHeight', { value: 256, configurable: true });
+      } catch (e) { /* ok */ }
+      this.dispatchEvent(new window.Event('load'));
+    }, 0);
+  },
+  get() { return this._src || ''; },
+});
 
 const errors = [];
 process.on('uncaughtException', (e) => errors.push('uncaught: ' + (e.stack || e)));

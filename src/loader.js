@@ -2,6 +2,8 @@
 // در حالت عادی فایل‌ها از public خوانده می‌شوند؛ در بیلد تک‌فایل (Luko-Game.html)
 // همه‌ی مدل‌ها و بافت‌ها داخل خود HTML هستند و این مدیر آدرس‌ها را به آن‌ها وصل می‌کند.
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 
 function resolveFromMap(url) {
   const map = globalThis.__ASSET_MAP__;
@@ -22,3 +24,11 @@ function resolveFromMap(url) {
 
 export const sharedManager = new THREE.LoadingManager();
 sharedManager.setURLModifier(resolveFromMap);
+
+// لودر GLB با پشتیبانی از مدل‌های فشرده (Meshopt) — همه‌ی مدل‌های public/models
+// با scripts/optimize-models.mjs فشرده شده‌اند تا شهر چند برابر سریع‌تر لود شود.
+export function makeGLTFLoader() {
+  const loader = new GLTFLoader(sharedManager);
+  try { loader.setMeshoptDecoder(MeshoptDecoder); } catch (e) { /* مدل‌های معمولی هم لود می‌شوند */ }
+  return loader;
+}

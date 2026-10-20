@@ -64,16 +64,13 @@ function walk(dir, out = []) {
   return out;
 }
 const map = {};
-for (const dir of ['public/models/city', 'public/models/cars']) {
+for (const dir of ['public/models/city', 'public/models/cars', 'public/models/suburban', 'public/models/nature']) {
   for (const f of walk(dir)) {
     const rel = relative('public', f).split('\\').join('/');
     const mime = f.endsWith('.glb') ? 'model/gltf-binary' : f.endsWith('.png') ? 'image/png' : null;
     if (mime) map[rel] = `data:${mime};base64,${readFileSync(f).toString('base64')}`;
   }
 }
-map['models/nature/tree.glb'] = `data:model/gltf-binary;base64,${readFileSync('public/models/nature/tree.glb').toString('base64')}`;
-map['models/nature/tree-tall.glb'] = `data:model/gltf-binary;base64,${readFileSync('public/models/nature/tree-tall.glb').toString('base64')}`;
-map['models/nature/Textures/colormap.png'] = `data:image/png;base64,${readFileSync('public/models/nature/Textures/colormap.png').toString('base64')}`;
 globalThis.__ASSET_MAP__ = map;
 
 const THREE = await import('three');
@@ -84,6 +81,8 @@ const fakeWorld = {
   clickables: [],
   shadowTex: new THREE.Texture(),
   addSprite: () => ({ scale: { y: 3 }, userData: {} }),
+  loadTexture: async () => new THREE.Texture(),
+  pitchSin: 0.75,
   worldToScreen: () => ({ x: 10, y: 10 }),
   texture: () => new THREE.Texture(),
 };
@@ -99,11 +98,15 @@ fakeWorld.scene.traverse((o) => {
   if (o.isMesh) { meshes++; if (o.material && o.material.map) textured++; }
   if (o.isInstancedMesh) instanced++;
 });
-check(`صحنه پر است (${meshes} مش، ${instanced} اینستنس)`, meshes > 120);
+let instancedCount = 0;
+fakeWorld.scene.traverse((o) => { if (o.isInstancedMesh) instancedCount += o.count; });
+check(`صحنه پر است (${meshes} مش، ${instanced} اینستنس‌مش با ${instancedCount} نمونه)`, meshes > 120 && instancedCount > 400);
 check(`مش‌های بافت‌دار مدل‌های Kenney در صحنه‌اند (${textured})`, textured > 40);
+check(`خانه‌های محله‌ها از City Kit Suburban چیده شده‌اند (${city.suburbCount} قطعه)`, city.suburbCount >= 200);
+check(`درخت‌های Survival Kit کاشته شده‌اند (${city.treeCount})`, city.treeCount >= 200);
 check(`همه‌ی ماشین‌های پکیج در حال ترددند (${city.cars.length})`, city.cars.length >= 24);
 check(`آدمک‌ها در شهرند (${city.peds.length})`, city.peds.length >= 40);
-check('برچسب ۸ ساختمان اصلی ساخته شد', city.labels.length === 8);
+check('برچسب ۷ ساختمان اصلی روی نقشه ساخته شد (تابلو حذف شد)', city.labels.length === 7);
 {
   city.group.updateMatrixWorld(true);
   const w = city.group.localToWorld(new THREE.Vector3(10, 0, 4));

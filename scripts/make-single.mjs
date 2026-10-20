@@ -60,11 +60,10 @@ const WANTED_ASSETS = new Set([
 const wanted = (rel) =>
   rel.startsWith('models/city/') ||
   rel.startsWith('models/cars/') ||
-  rel === 'models/nature/tree.glb' ||
-  rel === 'models/nature/tree-tall.glb' ||
-  rel.startsWith('models/nature/Textures/') ||
+  rel.startsWith('models/suburban/') ||
+  rel.startsWith('models/nature/') ||
   WANTED_ASSETS.has(rel) ||
-  /^assets\/city-[^/]+\.png$/.test(rel);
+  /^assets\/city-[^/]+\.(png|webp)$/.test(rel);
 
 for (const file of walk('public')) {
   const rel = relative('public', file).split('\\').join('/');
