@@ -82,7 +82,6 @@ export class City {
     this.parkEvent = null;       // رویداد پارک و پیاده‌شدن راننده
     this._kindMap = this._buildKindMap();
     // پیش‌فرض‌های ترافیک (تا قبل از _buildCars هم update امن باشد)
-    this._outerH = Infinity;
     this._exitR = 78;
     this._outsideCount = 0;
     this._accidentT = 9999;
@@ -890,7 +889,6 @@ export class City {
   // ---------- ماشین‌ها ----------
   async _buildCars() {
     const { P, B } = this;
-    const loops = [0.5 * P, 1.5 * P, 2.5 * P, 3.5 * P];
     // سرعت پایه — تقریباً نصفِ قبل؛ کارت‌ها تندتر، بقیه آرام شهری
     const SPEED = (n) => (/kart/.test(n) ? 2.6 + rand() * 0.6
       : /race/.test(n) ? 3.1 + rand() * 0.7
@@ -932,16 +930,16 @@ export class City {
       const g = new THREE.Group();
       g.add(inner);
       this.group.add(g);
-      const h = /kart/.test(name) ? loops[0] : loops[i % loops.length];
-      const per = 8 * h;
-      this.cars.push({
-        obj: g, wheels, wheelR, h,
-        dist: per / CITY.cars.length * i + rand() * 6,
-        angle: 0,
-        speed: SPEED(name), cur: 0, state: null, name,
-        dir: i % 2 === 0 ? 1 : -1,
-        lane: this.R / 4 - 0.12,
-      });
+      const car = {
+        obj: g, wheels, wheelR, name,
+        speed: SPEED(name), cur: 0, state: 'straight',
+        x: 0, z: 0, hx: 1, hz: 0, angle: 0,
+        nextC: null, _dest: null, _p: { x: 0, z: 0, hx: 1, hz: 0 },
+      };
+      this.cars.push(car);
+      // پخش کردن ماشین‌ها روی همه‌ی جاده‌های شبکه؛ کارت‌ها و مسابقه‌ای‌ها
+      // روی خیابان‌های بیرونی (که جا برای سرعت دارند)
+      this._placeOnRoad(car, /kart|race/.test(name));
       // پلیس: چراغ گردان قرمز/آبی روی سقف
       if (name === 'police') {
         const car = this.cars[this.cars.length - 1];
@@ -1001,11 +999,10 @@ export class City {
     this._blobs(parkedBlobs);
 
     // زمان‌بندی رویدادها: خروج از شهر، تصادف، پارک منزل
-    this._outerH = loops[loops.length - 1];
     this._exitR = 78;             // بعد از این شعاع، ماشین «در مه» است و برمی‌گردد داخل
     this._outsideCount = 0;
-    this._accidentT = 16 + Math.random() * 14;
-    this._parkT = 9 + Math.random() * 10;
+    this._accidentT = 14 + Math.random() * 12;
+    this._parkT = 8 + Math.random() * 8;
   }
 
   // ---------- درخت‌ها، سنگ‌ها و علف (Kenney Survival Kit — همان پکیج محصول قبلی) ----------
@@ -1201,6 +1198,13 @@ export class City {
       { cx: 0, cz: 0, h: 2 * P + inset, n: 9 },
       { cx: -2 * P, cz: 2 * P, h: inset, n: 3 },
       { cx: 2 * P, cz: 2 * P, h: inset, n: 3 },
+      // پیاده‌روی بلوک‌های بیرونی — آدمک‌ها فقط وسط شهر جمع نمی‌شوند
+      { cx: -2 * P, cz: -2 * P, h: inset, n: 3 },
+      { cx: 2 * P, cz: -2 * P, h: inset, n: 3 },
+      { cx: 0, cz: -2 * P, h: inset, n: 3 },
+      { cx: 0, cz: 2 * P, h: inset, n: 3 },
+      { cx: -2 * P, cz: 0, h: inset, n: 3 },
+      { cx: 2 * P, cz: 0, h: inset, n: 3 },
     ];
     for (const L of loops) {
       for (let i = 0; i < L.n; i++) {
@@ -1229,8 +1233,9 @@ export class City {
     }
 
     // عابرهایی که فقط از خط عابرِ تقاطع‌ها رد می‌شوند و منتظر ماشین می‌مانند
+    // (فقط تقاطع‌های داخل شهر — نه خیابان بیرونی که به مه می‌رود)
     const roadLines = [];
-    for (let i = -4; i <= 3; i++) roadLines.push((i + 0.5) * P);
+    for (let i = -3; i <= 2; i++) roadLines.push((i + 0.5) * P);
     const CW = this.R / 2 + 0.62;
     for (let i = 0; i < 12; i++) {
       const lx = pickOf(roadLines), lz = pickOf(roadLines);
@@ -1251,168 +1256,361 @@ export class City {
     }
   }
 
-  // ---------- ترافیک: فاصله‌گیری، توقف برای عابر، خروج/ورود به شهر ----------
-  // نزدیک‌ترین پارامتر مسیر مستطیلی به یک نقطه (برای تصادف و اعزام پلیس)
-  _distForPoint(h, dir, lane, x, z) {
-    const corners = [[-h, -h], [h, -h], [h, h], [-h, h]];
-    if (dir < 0) corners.reverse();
-    let best = 0, bestD = Infinity, base = 0;
-    for (let i = 0; i < 4; i++) {
-      const a = corners[i], b = corners[(i + 1) % 4];
-      const ux = (b[0] - a[0]) / (2 * h), uz = (b[1] - a[1]) / (2 * h);
-      const ax = a[0] - uz * lane, az = a[1] + ux * lane;
-      const t = Math.max(0, Math.min(2 * h, (x - ax) * ux + (z - az) * uz));
-      const px = ax + ux * t, pz = az + uz * t;
-      const d = (px - x) * (px - x) + (pz - z) * (pz - z);
-      if (d < bestD) { bestD = d; best = base + t; }
-      base += 2 * h;
+  // ---------- ترافیک شبکه‌ای: ماشین‌ها روی گرید خیابان‌ها آزادانه می‌گردند ----------
+  // هر ماشین روی یک جاده حرکت می‌کند، در هر تقاطع تصادفی می‌پیچد (پیچ نرمِ بزیه)،
+  // از ماشین جلویی عقب نمی‌ماند و برای عابر خط عابر کامل می‌ایستد.
+  _roadLines() {
+    if (!this._lines) {
+      this._lines = [];
+      for (let i = -CITY.range - 1; i <= CITY.range; i++) this._lines.push((i + 0.5) * this.P);
+    }
+    return this._lines;
+  }
+
+  get LANE() { return 1.16; }               // فاصله‌ی لاین از مرکز جاده (دوطرفه)
+  get D_IN() { return this.R / 2 + 2.1; }   // نقطه‌ی تصمیم/توقف قبل از تقاطع
+
+  _nearestLine(v) {
+    let best = this._roadLines()[0], bd = Infinity;
+    for (const l of this._roadLines()) {
+      const d = Math.abs(l - v);
+      if (d < bd) { bd = d; best = l; }
     }
     return best;
+  }
+
+  // نزدیک‌ترین تقاطعِ جلوتر در جهت حرکت — null یعنی جاده به لبه‌ی شهر رسید
+  _nextCross(x, z, hx, hz) {
+    let best = null, bd = Infinity;
+    if (Math.abs(hx) > 0.5) {
+      for (const l of this._roadLines()) {
+        const d = (l - x) * hx;
+        if (d > 0.6 && d < bd) { bd = d; best = { x: l, z }; }
+      }
+    } else {
+      for (const l of this._roadLines()) {
+        const d = (l - z) * hz;
+        if (d > 0.6 && d < bd) { bd = d; best = { x, z: l }; }
+      }
+    }
+    return best;
+  }
+
+  // قرار دادن ماشین روی یک جاده‌ی تصادفی شبکه
+  _placeOnRoad(c, outer = false) {
+    const L = this._roadLines();
+    const pool = outer ? L.filter((l) => Math.abs(l) >= 2 * this.P) : L;
+    const line = pool[Math.floor(rand() * pool.length)];
+    const vert = rand() < 0.5;
+    const along = (rand() * 2 - 1) * (3.5 * this.P - 3);
+    const sgn = rand() < 0.5 ? 1 : -1;
+    if (vert) {
+      c.hx = 0; c.hz = sgn;
+      c.x = line - sgn * this.LANE;
+      c.z = along;
+    } else {
+      c.hx = sgn; c.hz = 0;
+      c.x = along;
+      c.z = line + sgn * this.LANE;
+    }
+    c.nextC = this._nextCross(c.x, c.z, c.hx, c.hz);
+    c.angle = Math.atan2(c.hx, c.hz);
+    c.obj.rotation.y = c.angle;
+    c.obj.position.set(c.x, 0.07, c.z);
+    c._p = { x: c.x, z: c.z, hx: c.hx, hz: c.hz };
+  }
+
+  // آیا تقاطع توسط ماشینِ در حال پیچیدنِ دیگری اشغال است؟
+  _turnBusy(C, self) {
+    for (const o of this.cars) {
+      if (o === self || o.state !== 'turning' || !o._turnC) continue;
+      if (Math.hypot(o._turnC.x - C.x, o._turnC.z - C.z) < 5) return true;
+    }
+    return false;
+  }
+
+  // شروع پیچ: بزیه‌ی نرم از لاین ورودی به لاین خروجی (نه پیچِ ناگهانی وسط میدان)
+  _startTurn(c, C, dir) {
+    const rhx = -c.hz, rhz = c.hx;
+    const s = dir === 'right' ? 1 : -1;
+    const nx = rhx * s, nz = rhz * s;          // جهت جدید
+    const rnx = -nz, rnz = nx;                 // راستِ جهت جدید
+    const ex = C.x + nx * this.D_IN + rnx * this.LANE;
+    const ez = C.z + nz * this.D_IN + rnz * this.LANE;
+    const k = this.D_IN * 0.8;
+    c._turnC = C;
+    c._turnBack = c.state;
+    c._turn = {
+      t: 0,
+      x0: c.x, z0: c.z,
+      x1: c.x + c.hx * k, z1: c.z + c.hz * k,
+      x2: ex - nx * k, z2: ez - nz * k,
+      x3: ex, z3: ez,
+      nx, nz,
+      len: Math.hypot(ex - c.x, ez - c.z) * 0.8 + 3.2,
+    };
+    c.state = 'turning';
+  }
+
+  // نزدیک تقاطع: یک بار تصمیم می‌گیرد و تا باز بودن راه (حق تقدم/پیچ آزاد) سر خط می‌ایستد
+  _approachIntersection(c, dt) {
+    const C = c.nextC;
+    if (c._decidedFor !== C) {
+      c._decidedFor = C;
+      c._yieldT = 0;
+      const hx = c.hx, hz = c.hz;
+      const rhx = -hz, rhz = hx;
+      const straightNext = this._nextCross(C.x + hx * 2, C.z + hz * 2, hx, hz);
+      const rightNext = this._nextCross(C.x + rhx * 2, C.z + rhz * 2, rhx, rhz);
+      const leftNext = this._nextCross(C.x - rhx * 2, C.z - rhz * 2, -rhx, -rhz);
+      const last = !straightNext;   // دیگر تقاطعی در ادامه نیست → لبه‌ی شهر
+      if (c._dest) {
+        // پلیسِ اعزامی همیشه به سمت مقصدش می‌پیچد
+        let bd = Infinity, pick = null;
+        for (const [nm, pnt] of [['straight', straightNext], ['right', rightNext], ['left', leftNext]]) {
+          if (!pnt) continue;
+          const d = Math.hypot(pnt.x - c._dest.x, pnt.z - c._dest.z);
+          if (d < bd) { bd = d; pick = nm; }
+        }
+        c._choice = pick || 'exit';
+      } else {
+        const w = [];
+        if (straightNext) w.push(['straight', 0.56]);
+        if (rightNext) w.push(['right', 0.24]);
+        if (leftNext) w.push(['left', 0.2]);
+        // در آخرین تقاطع: یا می‌پیچد یا در مه از شهر بیرون می‌رود
+        if (last && this._outsideCount < 2) w.push(['exit', 0.4]);
+        if (!w.length) w.push(['exit', 1]);
+        let r = Math.random() * w.reduce((a, o) => a + o[1], 0), pick = null;
+        for (const [nm, ww] of w) { r -= ww; if (r <= 0) { pick = nm; break; } }
+        c._choice = pick || w[w.length - 1][0];
+      }
+    }
+
+    // اجرای تصمیم وقتی راه باز است
+    const choice = c._choice;
+    if (choice !== 'exit') {
+      // حق تقدم با ماشینِ سمت راست (تقاطع بدون چراغ!) — بعد از چند ثانیه رد می‌شود
+      c._yieldT += dt;
+      if (c._yieldT < 5 && this._yieldRight(c, C)) return;
+    }
+    c._decidedFor = null;
+    if (choice === 'exit') {
+      c.state = 'exiting';
+      this._outsideCount++;
+    } else if (choice === 'right' || choice === 'left') {
+      if (!this._turnBusy(C, c)) this._startTurn(c, C, choice);
+      else c._decidedFor = C;   // تقاطع اشغال است؛ کمی بعد دوباره
+    } else {
+      c.nextC = this._nextCross(C.x + c.hx * 2, C.z + c.hz * 2, c.hx, c.hz);
+    }
+  }
+
+  // آیا ماشین داخل محدوده‌ی تقاطع است؟
+  _nearIntersection(o) {
+    return Math.hypot(o.x - this._nearestLine(o.x), o.z - this._nearestLine(o.z)) < 6;
+  }
+
+  // آیا کسی از سمت راستِ من به همین تقاطع نزدیک می‌شود؟
+  _yieldRight(c, C) {
+    for (const o of this.cars) {
+      if (o === c) continue;
+      let same = false;
+      if (o.nextC && Math.abs(o.nextC.x - C.x) < 1 && Math.abs(o.nextC.z - C.z) < 1) same = true;
+      if (o.state === 'turning' && o._turnC && Math.abs(o._turnC.x - C.x) < 1 && Math.abs(o._turnC.z - C.z) < 1) same = true;
+      if (!same) continue;
+      const ox = o.x - C.x, oz = o.z - C.z;
+      if (Math.hypot(ox, oz) > this.D_IN + 4.5) continue;   // خیلی دور است
+      const rd = ox * (-c.hz) + oz * (c.hx);   // سمت راست من؟
+      const fd = ox * c.hx + oz * c.hz;        // جلوی من نباشد
+      if (rd > 2 && fd < 2 && (o.cur > 0.05 || o.state === 'turning')) return true;
+    }
+    return false;
+  }
+
+  // بعد از رفتن در مه، از سمت دیگری وارد شهر می‌شود
+  _startEnter(c) {
+    const L = this._roadLines();
+    const line = L[Math.floor(Math.random() * L.length)];
+    const vert = Math.random() < 0.5;
+    const sgn = Math.random() < 0.5 ? 1 : -1;   // به سمت شهر
+    const D = 82;
+    if (vert) {
+      c.hx = 0; c.hz = sgn;
+      c.x = line - sgn * this.LANE;
+      c.z = -sgn * D;
+    } else {
+      c.hx = sgn; c.hz = 0;
+      c.x = -sgn * D;
+      c.z = line + sgn * this.LANE;
+    }
+    c.cur = Math.min(c.speed, 2.6);
+    c.angle = Math.atan2(c.hx, c.hz);
+    c.obj.rotation.y = c.angle;
+    c.state = 'straight';
+    c.nextC = this._nextCross(c.x, c.z, c.hx, c.hz);
+    this._outsideCount = Math.max(0, this._outsideCount - 1);
   }
 
   _updateTraffic(dt, t) {
     const cars = this.cars;
 
-    // گروه‌بندی حلقه‌ها؛ ماشین‌های خراب هم مانع حساب می‌شوند
-    const groups = new Map();
+    // ۱) تصمیم‌های تقاطع (ایست سر خط تا باز شدن راه)
     for (const c of cars) {
-      if (c.state !== null && c.state !== 'crashed' && c.state !== 'dispatch') continue;
-      const key = c.h + '|' + c.dir;
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(c);
-    }
-    for (const list of groups.values()) {
-      const L = 8 * list[0].h;
-      const nd = (d) => ((d % L) + L) % L;
-      list.sort((a, b) => nd(a.dist) - nd(b.dist));
-      for (let i = 0; i < list.length; i++) {
-        if (list.length === 1) { list[i]._gap = 30; continue; }
-        const ahead = list[(i + 1) % list.length];
-        const dc = nd(list[i].dist), da = nd(ahead.dist);
-        const gap = da > dc ? da - dc : da + L - dc;
-        list[i]._gap = Math.max(0, gap - 2.15);
+      if ((c.state === 'straight' || c.state === 'dispatch') && c.nextC) {
+        const dc = (c.nextC.x - c.x) * c.hx + (c.nextC.z - c.z) * c.hz;
+        if (dc <= this.D_IN) this._approachIntersection(c, dt);
+      } else if (c.state === 'straight' && !c.nextC) {
+        // ایمنی: جاده تمام شد → از شهر خارج شو
+        c.state = 'exiting';
+        this._outsideCount++;
       }
     }
 
-    // هدف سرعت هر ماشین
+    // ۲) هدف سرعت هر ماشین
     for (const c of cars) {
-      if (c.state === 'crashed') { c._target = 0; continue; }
-      if (c.state !== null && c.state !== 'dispatch') continue; // خارج از ترافیک حلقه
+      if (c.state === 'crashed' || c.state === 'parked') { c._target = 0; continue; }
+      if (c.state !== 'straight' && c.state !== 'turning' && c.state !== 'exiting' && c.state !== 'dispatch') continue;
       let target = c.speed;
-      if (c._gap < 0.4) target = 0;
-      else target = Math.min(target, c._gap * 1.7);
-      if (c.state === 'dispatch') target = Math.min(target * 1.8, 4.0);
+      if (c.state === 'dispatch' && c._dest) target = Math.min(target * 1.7, 4.0);
+
+      // فاصله با جلوییِ هم‌جهت در همان جاده (ماشین از ماشین رد نمی‌شود)
+      let gap = Infinity;
+      for (const o of cars) {
+        if (o === c) continue;
+        const rx = o.x - c.x, rz = o.z - c.z;
+        const fwd = rx * c.hx + rz * c.hz;
+        if (fwd <= 0 || fwd > 34) continue;
+        const lat = Math.abs(rx * c.hz - rz * c.hx);
+        if (lat > 0.95) continue;
+        if (o.hx * c.hx + o.hz * c.hz < 0.7) continue;
+        if (fwd - 2.2 < gap) gap = fwd - 2.2;
+      }
+      if (gap < 0.4) target = 0;
+      else target = Math.min(target, gap * 1.7);
+
+      // مانع‌های جلو: بر اساس «باند جاده‌ی خودم» — نه هر چیزی که زاویه‌دار جلو است
+      if (c.state === 'turning') {
+        // در حال پیچ: فقط مانع چسبیده (تا وسط تقاطع گیر نکند)
+        if (c._p) {
+          for (const o of cars) {
+            if (o === c) continue;
+            const rx = o.x - c.x, rz = o.z - c.z;
+            const fwd = rx * c._p.hx + rz * c._p.hz;
+            if (fwd <= 0.15 || fwd > 2.4) continue;
+            const lat = Math.abs(rx * c._p.hz - rz * c._p.hx);
+            if (lat < 1.15) { target = 0; break; }
+          }
+        }
+      } else if (c._p) {
+        const horiz = Math.abs(c.hx) > 0.5;
+        const myLine = horiz ? this._nearestLine(c.z) : this._nearestLine(c.x);
+        for (const o of cars) {
+          if (o === c) continue;
+          const rx = o.x - c.x, rz = o.z - c.z;
+          const fwd = rx * c.hx + rz * c.hz;
+          if (fwd <= 0.15) continue;
+          const laneDist = Math.abs(horiz ? rz : rx);                       // فاصله از لاین خودم
+          const strip = Math.abs(horiz ? o.z - myLine : o.x - myLine);     // فاصله از باند جاده‌ام
+          const dot = o.hx * c.hx + o.hz * c.hz;
+          // ماشینِ ایستاده داخل تقاطع: فقط اگر من حق تقدمِ قطعی نداشته باشم منتظرش می‌مانم
+          // (اولویت قطعی = یا در حال حرکتم، یا ضرب‌جهت‌ها به نفعم است) — تا دو ماشینِ روبه‌رویی
+          // همزمان برای هم نایستند و قفل نشوند
+          const oStuckInBox = o.cur < 0.05 && this._nearIntersection(o);
+          const iGo = c.cur > 0.3 || (c.hx * o.hz - c.hz * o.hx) > 0;
+          let block = false;
+          if (dot > 0.7) block = laneDist < 1.0 && fwd < 3.6 + c.cur * 0.9;          // هم‌جهت در لاینم
+          else if (dot < -0.7) block = laneDist < 0.9 && fwd < 3.0;                 // روبه‌رو وارد لاینم شده
+          else block = strip < 1.35 && fwd < 3.6 + c.cur * 0.9 &&
+            !(oStuckInBox && laneDist > 0.6 && iGo);                                // عرضی/در حال پیچ
+          // خیلی نزدیک و در مسیرم — به‌جز ایستاده‌ی داخل تقاطع که من اولویت دارم
+          if (!block && fwd < 1.7 && laneDist < 0.95 && !oStuckInBox) block = true;
+          if (block) { target = 0; break; }
+        }
+      }
+
       // عابر روی خط عابر → توقف کامل
-      if (this.crossers.length && c._p) {
+      if (c._p) {
         for (const cr of this.crossers) {
           if (cr.phase !== 'cross') continue;
-          // فقط وقتی عابر روی خودِ جاده است
           if (cr.vert ? Math.abs(cr.z - cr.lz) > this.R / 2 + 0.55 : Math.abs(cr.x - cr.lx) > this.R / 2 + 0.55) continue;
-          const dx = cr.x - c._p.x, dz = cr.z - c._p.z;
+          const dx = cr.x - c.x, dz = cr.z - c.z;
           const fwd = dx * c._p.hx + dz * c._p.hz;
           const lat = Math.abs(dx * c._p.hz - dz * c._p.hx);
           if (fwd > 0.1 && fwd < 3.4 + c.cur * 0.85 && lat < 1.7) { target = 0; break; }
         }
       }
-      // پلیس نزدیک محل تصادف می‌ایستد (پشت ماشین‌های تصادفی صف می‌کند)
-      if (c.state === 'dispatch' && this.accident && c._p) {
-        const d = Math.hypot(c._p.x - this.accident.x, c._p.z - this.accident.z);
-        if (d < 5.5) target = 0;
+
+      // پلیس کنار محل تصادف می‌ایستد
+      if (c.state === 'dispatch' && this.accident) {
+        const d = Math.hypot(c.x - this.accident.x, c.z - this.accident.z);
+        if (d < 6.0) target = 0;
       }
+
+      // تصمیمِ تقاطع هنوز اجرا نشده → ایست سر خط (قبل از خط عابر)
+      if ((c.state === 'straight' || c.state === 'dispatch') && c._decidedFor && c._decidedFor === c.nextC) target = 0;
       c._target = target;
     }
 
-    // حرکت
+    // ۳) حرکت
     for (const c of cars) {
       const rate = c._target > c.cur ? 1.7 : 6.5;   // گاز نرم، ترمز تند
       c.cur += (c._target - c.cur) * Math.min(1, dt * rate);
       if (Math.abs(c._target - c.cur) < 0.015) c.cur = c._target;
       const spin = (c.cur * dt) / Math.max(0.05, c.wheelR);
 
-      if (c.state === null || c.state === 'dispatch' || c.state === 'crashed') {
-        const before = c.dist;
-        c.dist += c.cur * dt;
-        const p = rectPoint(c.h, c.h, c.dist, c.dir, c.lane);
-        c._p = p;
-        c.obj.position.set(p.x, 0.07, p.z);
-        const ta = Math.atan2(p.hx, p.hz);
+      if (c.state === 'turning') {
+        const T = c._turn;
+        T.t = Math.min(1, T.t + (c.cur * dt) / T.len);
+        // اگر بیش از حد مجاز وسط تقاطع ایستاد (صف/تصادف) پیچ را کامل می‌کند
+        c._turnStill = c.cur < 0.05 ? (c._turnStill || 0) + dt : 0;
+        if (c._turnStill > 7) T.t = 1;
+        const u = 1 - T.t;
+        const bx = u * u * u * T.x0 + 3 * u * u * T.t * T.x1 + 3 * u * T.t * T.t * T.x2 + T.t * T.t * T.t * T.x3;
+        const bz = u * u * u * T.z0 + 3 * u * u * T.t * T.z1 + 3 * u * T.t * T.t * T.z2 + T.t * T.t * T.t * T.z3;
+        const tx = 3 * u * u * (T.x1 - T.x0) + 6 * u * T.t * (T.x2 - T.x1) + 3 * T.t * T.t * (T.x3 - T.x2);
+        const tz = 3 * u * u * (T.z1 - T.z0) + 6 * u * T.t * (T.z2 - T.z1) + 3 * T.t * T.t * (T.z3 - T.z2);
+        const tl = Math.hypot(tx, tz) || 1;
+        c.x = bx; c.z = bz;
+        c._p = { x: bx, z: bz, hx: tx / tl, hz: tz / tl };
+        c.obj.position.set(bx, 0.07, bz);
+        const ta = Math.atan2(c._p.hx, c._p.hz);
+        let d = ta - c.angle;
+        while (d > Math.PI) d -= Math.PI * 2;
+        while (d < -Math.PI) d += Math.PI * 2;
+        c.angle += d * Math.min(1, dt * 10);
+        c.obj.rotation.y = c.angle;
+        for (const w of c.wheels) w.rotation.x += spin;
+        if (T.t >= 1) {
+          c._turnStill = 0;
+          c.hx = T.nx; c.hz = T.nz;
+          c.x = T.x3; c.z = T.z3;
+          c.nextC = this._nextCross(c.x, c.z, c.hx, c.hz);
+          // پلیس اگر هنوز مأموریت دارد dispatch می‌ماند، وگرنه عادی می‌شود
+          c.state = c._turnBack === 'dispatch' && c._dest ? 'dispatch' : 'straight';
+          c._p = { x: c.x, z: c.z, hx: c.hx, hz: c.hz };
+        }
+      } else if (c.state !== 'crashed' && c.state !== 'parked' && c.state !== 'toPark' && c.state !== 'away') {
+        if (c.state !== 'parked') {
+          const adv = c.cur * dt;
+          c.x += c.hx * adv;
+          c.z += c.hz * adv;
+        }
+        if (c.state === 'exiting' && Math.max(Math.abs(c.x), Math.abs(c.z)) > this._exitR) {
+          this._startEnter(c);
+        }
+        c._p = { x: c.x, z: c.z, hx: c.hx, hz: c.hz };
+        c.obj.position.set(c.x, 0.07, c.z);
+        const ta = Math.atan2(c.hx, c.hz);
         let d = ta - c.angle;
         while (d > Math.PI) d -= Math.PI * 2;
         while (d < -Math.PI) d += Math.PI * 2;
         c.angle += d * Math.min(1, dt * 7);
         c.obj.rotation.y = c.angle;
         for (const w of c.wheels) w.rotation.x += spin;
-
-        // خروج از شهر: در گوشه‌ی حلقه‌ی بیرونی مستقیم برود و در مه گم شود
-        if (c.state === null && c.h === this._outerH && this._outsideCount < 2 && Math.random() < 0.35) {
-          const side = 2 * c.h;
-          const L = 8 * c.h;
-          const nb = ((before % L) + L) % L, na = ((c.dist % L) + L) % L;
-          if (Math.floor(nb / side) !== Math.floor(na / side)) {
-            const pb = rectPoint(c.h, c.h, before, c.dir, c.lane);
-            c.state = 'exiting';
-            this._outsideCount++;
-            c._ex = {
-              dx: pb.hx, dz: pb.hz,
-              x: pb.x + pb.hx * (c.dist - before),
-              z: pb.z + pb.hz * (c.dist - before),
-            };
-          }
-        }
-        // نرمال‌سازی مسافت داخل یک دور
-        {
-          const L = 8 * c.h;
-          if (c.dist >= L || c.dist < 0) c.dist = ((c.dist % L) + L) % L;
-        }
-      } else if (c.state === 'exiting') {
-        c.cur += (Math.min(c.speed * 1.35, 3.4) - c.cur) * Math.min(1, dt * 1.5);
-        c._ex.x += c._ex.dx * c.cur * dt;
-        c._ex.z += c._ex.dz * c.cur * dt;
-        c._p = { x: c._ex.x, z: c._ex.z, hx: c._ex.dx, hz: c._ex.dz };
-        c.obj.position.set(c._ex.x, 0.07, c._ex.z);
-        for (const w of c.wheels) w.rotation.x += spin;
-        if (Math.max(Math.abs(c._ex.x), Math.abs(c._ex.z)) > this._exitR) this._startEnter(c);
-      } else if (c.state === 'entering') {
-        c.cur += (Math.min(c.speed, 2.8) - c.cur) * Math.min(1, dt * 1.5);
-        const e = c._en;
-        e.x += e.dx * c.cur * dt;
-        e.z += e.dz * c.cur * dt;
-        c._p = { x: e.x, z: e.z, hx: e.dx, hz: e.dz };
-        c.obj.position.set(e.x, 0.07, e.z);
-        for (const w of c.wheels) w.rotation.x += spin;
-        const rem = (e.tx - e.x) * e.dx + (e.tz - e.z) * e.dz;
-        if (rem <= 0) {
-          c.state = null;
-          c._p = rectPoint(c.h, c.h, c.dist, c.dir, c.lane);
-          c.obj.position.set(c._p.x, 0.07, c._p.z);
-        }
       }
-      // toPark/parked/away در _updateParking حرکت می‌کنند
+      // toPark/away در _updateParking حرکت می‌کنند | crashed/parked سر جایشان می‌مانند
     }
-  }
-
-  // بعد از رفتن در مه، از سمت دیگری به شهر وارد می‌شود
-  _startEnter(c) {
-    const side = 2 * c.h;
-    const corners = [[-c.h, -c.h], [c.h, -c.h], [c.h, c.h], [-c.h, c.h]];
-    if (c.dir < 0) corners.reverse();
-    const k = Math.floor(Math.random() * 4);
-    const a = corners[k], b = corners[(k + 1) % 4];
-    const ux = (b[0] - a[0]) / side, uz = (b[1] - a[1]) / side;
-    const D = 36; // از دل مه
-    c._en = {
-      x: a[0] - uz * c.lane - ux * D,
-      z: a[1] + ux * c.lane - uz * D,
-      tx: a[0] - uz * c.lane,
-      tz: a[1] + ux * c.lane,
-      dx: ux, dz: uz,
-    };
-    c.dist = k * side;
-    c.angle = Math.atan2(ux, uz);
-    c.obj.rotation.y = c.angle;
-    c.cur = Math.min(c.speed, 2.6);
-    c.state = 'entering';
-    this._outsideCount = Math.max(0, this._outsideCount - 1);
   }
 
   // ---------- رویدادها: تصادف و پارک منزل ----------
@@ -1420,7 +1618,7 @@ export class City {
     if (!this.accident) {
       this._accidentT -= dt;
       if (this._accidentT <= 0) {
-        this._accidentT = 34 + Math.random() * 40;
+        this._accidentT = 30 + Math.random() * 35;
         this._startAccident();
       }
     } else {
@@ -1429,7 +1627,7 @@ export class City {
     if (!this.parkEvent) {
       this._parkT -= dt;
       if (this._parkT <= 0) {
-        this._parkT = 22 + Math.random() * 30;
+        this._parkT = 16 + Math.random() * 22;
         this._startParking();
       }
     } else {
@@ -1438,42 +1636,69 @@ export class City {
   }
 
   _startAccident() {
-    const police = this.cars.find((c) => c.name === 'police' && c.state === null);
+    const police = this.cars.find((c) => c.name === 'police' && (c.state === 'straight' || c.state === 'dispatch'));
     if (!police) return;
-    const ok = (c) => c.state === null && c !== police &&
+    const ok = (c) => c.state === 'straight' && c !== police &&
       !/kart|race|police|tractor|truck|firetruck|garbage|delivery|ambulance/.test(c.name);
-    // جفت ماشین روی حلقه‌ی پلیس (تصادف وسط شهر، جلوی چشم!)
-    const pool = this.cars.filter((c) => ok(c) && c.h === police.h && c.dir === police.dir);
-    if (pool.length < 1) return;
-    const a = pool[Math.floor(Math.random() * pool.length)];
-    const b = this.cars.find((c) => ok(c) && c !== a && c.h === a.h && c.dir === a.dir);
-    if (!b) return;
-    const pa = rectPoint(a.h, a.h, a.dist, a.dir, a.lane);
-    // ماشین دوم از پشت به او می‌رسد (تصادف دنباله‌ای)
-    const L = 8 * a.h;
-    b.dist = (((a.dist - 2.35) % L) + L) % L;
-    a.cur = 0; b.cur = 0; a._target = 0; b._target = 0;
+    // جفت طبیعی: ماشین و پشتِ سرش در همان لاین (بدون تلپورت)
+    let a = null, b = null, bg = Infinity;
+    for (const c of this.cars) {
+      if (!ok(c)) continue;
+      // نه وسط تقاطع — تصادف وسط خیابان باشد
+      if (c.nextC && (c.nextC.x - c.x) * c.hx + (c.nextC.z - c.z) * c.hz < 5.5) continue;
+      for (const o of this.cars) {
+        if (!ok(o) || o === c) continue;
+        const rx = o.x - c.x, rz = o.z - c.z;
+        const fwd = rx * c.hx + rz * c.hz;
+        if (fwd <= 1.5 || fwd > 10) continue;
+        const lat = Math.abs(rx * c.hz - rz * c.hx);
+        if (lat > 1.0) continue;
+        if (o.hx * c.hx + o.hz * c.hz < 0.7) continue;
+        if (fwd < bg) { bg = fwd; a = c; b = o; }
+      }
+    }
+    if (!a) {
+      // جفت طبیعی نبود: یک ماشینِ آزاد، تمیز و بی‌خطر پشتِ سرِ ماشین اول می‌نشیند
+      const cands = this.cars.filter(ok);
+      if (cands.length < 2) return;
+      a = cands[Math.floor(Math.random() * cands.length)];
+      if (a.nextC && (a.nextC.x - a.x) * a.hx + (a.nextC.z - a.z) * a.hz < 5.5) return;
+      const bx = a.x - a.hx * 2.45, bz = a.z - a.hz * 2.45;
+      // جای نشستن کاملاً خالی باشد (که سه‌تا ماشین تو هم نروند)
+      for (const o of this.cars) {
+        if (o !== a && Math.hypot(o.x - bx, o.z - bz) < 3.4) return;
+      }
+      const rest = cands.filter((o) => o !== a);
+      if (!rest.length) return;
+      b = rest[Math.floor(Math.random() * rest.length)];
+      b.x = bx; b.z = bz;
+      b.hx = a.hx; b.hz = a.hz;
+      b.angle = a.angle;
+      b.obj.position.set(bx, 0.07, bz);
+      b.obj.rotation.y = b.angle;
+      b.nextC = this._nextCross(bx, bz, b.hx, b.hz);
+      b._p = { x: bx, z: bz, hx: b.hx, hz: b.hz };
+      b._decidedFor = null;
+    }
     a.state = 'crashed'; b.state = 'crashed';
+    a.cur = 0; b.cur = 0; a._target = 0; b._target = 0;
     // سرنشین‌ها پیاده می‌شوند و کنار جاده می‌ایستند
     const people = [];
     for (const car of [a, b]) {
-      const p = rectPoint(car.h, car.h, car.dist, car.dir, car.lane);
-      const px = p.x + p.hz * 2.15 + (Math.random() - 0.5) * 0.6;
-      const pz = p.z - p.hx * 2.15 + (Math.random() - 0.5) * 0.6;
+      const rx = -car.hz, rz = car.hx;   // سمت راست → لبه‌ی جاده
+      const px = car.x + rx * 2.15 + (Math.random() - 0.5) * 0.6;
+      const pz = car.z + rz * 2.15 + (Math.random() - 0.5) * 0.6;
       const per = this._person();
       per.g.position.set(px, 0.06, pz);
-      per.g.rotation.y = Math.atan2(p.x - px, p.z - pz);
+      per.g.rotation.y = Math.atan2(car.x - px, car.z - pz);
       this.group.add(per.g);
       people.push({ ...per, x: px, z: pz });
     }
-    // پلیس از نزدیک‌ترین نقطه‌ی مسیرش اعزام می‌شود
-    const dPol = this._distForPoint(police.h, police.dir, police.lane, pa.x, pa.z);
-    const Lp = 8 * police.h;
-    police.dist = (((dPol - 9) % Lp) + Lp) % Lp;
-    police.cur = 0;
+    // پلیس اعزام می‌شود (در گرید به سمت محل می‌پیچد)
     police.state = 'dispatch';
+    police._dest = { x: a.x, z: a.z };
     if (police.lights) police.lights.bar.visible = true;
-    this.accident = { a, b, people, police, x: pa.x, z: pa.z, phase: 'wait', t: 0 };
+    this.accident = { a, b, people, police, x: a.x, z: a.z, phase: 'wait', t: 0 };
     if (this.ui?.toast) this.ui.toast('🚨 یه تصادف کوچولو شد؛ پلیس داره می‌رسه!');
   }
 
@@ -1485,13 +1710,12 @@ export class City {
       A.police.lights.red.visible = on;
       A.police.lights.blue.visible = !on;
     }
-    // سرنشین‌ها منتظر می‌ایستند
     for (const p of A.people) {
       p.g.position.y = 0.06 + Math.abs(Math.sin(t * 1.3 + p.z)) * 0.012;
     }
     if (A.phase === 'wait') {
-      const d = A.police._p ? Math.hypot(A.police._p.x - A.x, A.police._p.z - A.z) : 99;
-      if (d < 6.5 || A.t > 25) { A.phase = 'fixing'; A.t = 0; }
+      const d = Math.hypot(A.police.x - A.x, A.police.z - A.z);
+      if (d < 6.5 || A.t > 30) { A.phase = 'fixing'; A.t = 0; }
     } else if (A.phase === 'fixing') {
       if (A.t > 4.5) { A.phase = 'leave'; A.t = 0; }
     } else if (A.phase === 'leave') {
@@ -1500,8 +1724,8 @@ export class City {
       for (let i = 0; i < A.people.length; i++) {
         const p = A.people[i];
         const car = i === 0 ? A.a : A.b;
-        const cp = rectPoint(car.h, car.h, car.dist, car.dir, car.lane);
-        const tx = cp.x + cp.hz * 1.15, tz = cp.z - cp.hx * 1.15;
+        const rx = -car.hz, rz = car.hx;
+        const tx = car.x + rx * 1.15, tz = car.z + rz * 1.15;
         const d = Math.hypot(tx - p.x, tz - p.z);
         if (d > 0.12) {
           all = false;
@@ -1517,10 +1741,13 @@ export class City {
       }
       if (all && A.t > 3) {
         for (const p of A.people) this.group.remove(p.g);
-        A.a.state = null; A.b.state = null;
-        A.a.cur = 0.35; A.b.cur = 0.35;
-        A.a._target = A.a.speed; A.b._target = A.b.speed;
-        A.police.state = null;
+        for (const car of [A.a, A.b]) {
+          car.state = 'straight';
+          car.cur = 0.35;
+          car._target = car.speed;
+        }
+        A.police._dest = null;
+        if (A.police.state === 'dispatch') A.police.state = 'straight';
         if (A.police.lights) { A.police.lights.bar.visible = false; A.police.lights.red.visible = true; A.police.lights.blue.visible = true; }
         this.accident = null;
       }
@@ -1534,21 +1761,39 @@ export class City {
         !this.parkedStatic.some((p) => Math.hypot(p.x - sp.x, p.z - sp.z) < 2.6));
     }
     if (!this.parkingSpots.length) return;
-    const car = this.cars.find((c) => c.state === null &&
-      /^(sedan|sedan-sports|suv|suv-luxury|van|hatchback-sports|taxi)$/.test(c.name));
+    // جفتِ (ماشین، جای پارک): جای پارک باید در همان جاده‌ی ماشین و جلویش باشد
+    // تا مانور کوتاه و طبیعی باشد (نه پرواز از وسط شهر!)
+    let car = null, spot = null, bd = Infinity;
+    for (const c of this.cars) {
+      if (c.state !== 'straight' ||
+        !/^(sedan|sedan-sports|suv|suv-luxury|van|hatchback-sports|taxi)$/.test(c.name)) continue;
+      const vertRoad = Math.abs(c.hz) > 0.5;
+      for (const sp of this.parkingSpots) {
+        let d;
+        if (vertRoad) {
+          const lx = this._nearestLine(c.x);
+          if (Math.abs(sp.x - lx) > 4.6 || Math.abs(sp.x - lx) < 2.0) continue;
+          d = (sp.z - c.z) * c.hz;
+        } else {
+          const lz = this._nearestLine(c.z);
+          if (Math.abs(sp.z - lz) > 4.6 || Math.abs(sp.z - lz) < 2.0) continue;
+          d = (sp.x - c.x) * c.hx;
+        }
+        if (d <= 1 || d > 34) continue;
+        if (d < bd) { bd = d; car = c; spot = sp; }
+      }
+    }
     if (!car) return;
-    const spot = this.parkingSpots[Math.floor(Math.random() * this.parkingSpots.length)];
-    const p = car._p || rectPoint(car.h, car.h, car.dist, car.dir, car.lane);
     car.state = 'toPark';
     car._target = 0;
     car.cur = 0;
-    car._from = { x: p.x, z: p.z };
-    const dx = spot.x - p.x, dz = spot.z - p.z;
+    car._from = { x: car.x, z: car.z };
+    const dx = spot.x - car.x, dz = spot.z - car.z;
     const sgn = Math.random() < 0.5 ? 1 : -1;
     car._park = {
       spot, prog: 0,
-      mx: p.x + dx * 0.5 - dz * 0.2 * sgn,
-      mz: p.z + dz * 0.5 + dx * 0.2 * sgn,
+      mx: car.x + dx * 0.5 - dz * 0.22 * sgn,
+      mz: car.z + dz * 0.5 + dx * 0.22 * sgn,
     };
     this.parkEvent = { car, spot, phase: 'drive', t: 0, driver: null, stay: 0 };
   }
@@ -1565,10 +1810,11 @@ export class City {
       const from = E.phase === 'drive' ? car._from : { x: spot.x, z: spot.z };
       const to = E.phase === 'drive' ? spot : car._from;
       const pk = car._park;
-      pk.prog = Math.min(1, pk.prog + dt / 3.4);
+      pk.prog = Math.min(1, pk.prog + dt / 3.0);
       const ease = pk.prog * pk.prog * (3 - 2 * pk.prog);
       const [x, z] = bz(ease, from.x, from.z, pk.mx, pk.mz, to.x, to.z);
       const [x2, z2] = bz(Math.min(1, ease + 0.06), from.x, from.z, pk.mx, pk.mz, to.x, to.z);
+      car.x = x; car.z = z;
       car.obj.position.set(x, 0.07, z);
       const ta = Math.atan2(x2 - x, z2 - z);
       let d = ta - car.angle;
@@ -1589,10 +1835,10 @@ export class City {
           this.group.add(per.g);
           E.driver = { ...per, x: spot.x + 0.85, z: spot.z };
         } else {
-          car.state = null;
+          car.state = 'straight';
           car.cur = 0.3;
-          car._p = rectPoint(car.h, car.h, car.dist, car.dir, car.lane);
-          car.obj.position.set(car._p.x, 0.07, car._p.z);
+          car._p = { x: car.x, z: car.z, hx: car.hx, hz: car.hz };
+          car.nextC = this._nextCross(car.x, car.z, car.hx, car.hz);
           this.parkEvent = null;
         }
       }
@@ -1614,7 +1860,7 @@ export class City {
         p.armL.rotation.x = -swing * 0.35; p.armR.rotation.x = swing * 0.35;
       } else if (going) {
         p.g.visible = false;          // وارد خانه می‌شود
-        E.phase = 'inside'; E.t = 0; E.stay = 45 + Math.random() * 100;
+        E.phase = 'inside'; E.t = 0; E.stay = 40 + Math.random() * 80;
       } else {
         this.group.remove(p.g);       // سوار می‌شود و می‌رود
         car._park.prog = 0;
@@ -1653,8 +1899,8 @@ export class City {
         if (cr.prog < 0.3) {
           for (const c of this.cars) {
             if (!c._p) continue;
-            if (c.state !== null && c.state !== 'dispatch' && c.state !== 'exiting' && c.state !== 'entering') continue;
-            const d = Math.hypot(c._p.x - cr.x, c._p.z - cr.z);
+            if (c.state === 'crashed' || c.state === 'parked' || c.state === 'toPark' || c.state === 'away') continue;
+            const d = Math.hypot(c.x - cr.x, c.z - cr.z);
             if (d < 2.2 || (d < 6.2 && c.cur > 0.25)) { hold = true; break; }
           }
         }
@@ -1662,18 +1908,20 @@ export class City {
         const q = cr.back ? 1 - cr.prog : cr.prog;
         const x = cr.ax + (cr.bx - cr.ax) * q;
         const z = cr.az + (cr.bz - cr.az) * q;
+        // پاها به‌آرامی به حالت ایست برمی‌گردند (نه فریزِ وسط قدم)
+        cr.moveAmt = (cr.moveAmt ?? 0) + ((hold ? 0 : 1) - (cr.moveAmt ?? 0)) * Math.min(1, dt * 5);
+        const swing = Math.sin(t * 8.5) * cr.moveAmt;
         if (!hold) {
           const fx = (cr.bx - cr.ax) * (cr.back ? -1 : 1);
           const fz = (cr.bz - cr.az) * (cr.back ? -1 : 1);
-          const swing = Math.sin(t * 8.5);
-          cr.g.position.set(x, 0.06 + Math.abs(Math.cos(t * 8.5)) * 0.035, z);
           cr.g.rotation.y = Math.atan2(fx, fz);
-          cr.legL.rotation.x = swing * 0.55;
-          cr.legR.rotation.x = -swing * 0.55;
-          cr.armL.rotation.x = -swing * 0.42;
-          cr.armR.rotation.x = swing * 0.42;
+          cr.x = x; cr.z = z;
         }
-        cr.x = x; cr.z = z;
+        cr.g.position.set(cr.x, 0.06 + Math.abs(Math.cos(t * 8.5)) * 0.035 * cr.moveAmt + Math.abs(Math.sin(t * 1.4)) * 0.012 * (1 - cr.moveAmt), cr.z);
+        cr.legL.rotation.x = swing * 0.55;
+        cr.legR.rotation.x = -swing * 0.55;
+        cr.armL.rotation.x = -swing * 0.42;
+        cr.armR.rotation.x = swing * 0.42;
         if (cr.prog >= 1) {
           cr.back = !cr.back;
           cr.phase = cr.back ? 'pause' : 'wait';
