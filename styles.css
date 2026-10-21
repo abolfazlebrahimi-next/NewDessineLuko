@@ -72,7 +72,10 @@ html, body {
 }
 
 #game {
-  position: fixed; inset: 0;   /* کل پنجره را می‌پوشاند — پایین صفحه قطع نمی‌شود */
+  position: fixed; left: 0; right: 0; top: 0;
+  /* دقیقاً همان ارتفاعِ قابل‌دید (بدون نوار ابزار مرورگر) — نه زیرش که
+     محو/کات دیده شود؛ نوارِ باقی‌مانده هم‌رنگ چمن است و دیده نمی‌شود */
+  height: var(--app-h, 100dvh);
   overflow: hidden;
 }
 #scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }

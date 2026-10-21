@@ -80,6 +80,8 @@ export class City {
     this.crossers = [];          // عابرهای خط عابر پیاده
     this.accident = null;        // رویداد تصادف + پلیس
     this.parkEvent = null;       // رویداد پارک و پیاده‌شدن راننده
+    this.visitors = [];          // آدمک‌هایی که گاهی داخل خانه می‌روند
+    this._visitT = 5;
     this._kindMap = this._buildKindMap();
     // پیش‌فرض‌های ترافیک (تا قبل از _buildCars هم update امن باشد)
     this._exitR = 78;
@@ -190,6 +192,30 @@ export class City {
     for (const l of lines) {
       roadRects.push([X(l - R / 2), 0, U(R), S]);
       roadRects.push([0, Y(l - R / 2), S, U(R)]);
+    }
+
+    // پیاده‌روی کنار جاده‌ها «بیرون شهر» — مثل جدول‌های داخل شهر، تا
+    // ادامه‌ی خیابان‌ها همان حس شهری را داشته باشند (بعد آسفالت رویش می‌آید)
+    const SW = 0.85;   // پهنای پیاده‌رو
+    g.fillStyle = '#c6cad2';
+    for (const l of lines) {
+      for (const s2 of [-1, 1]) {
+        // دو قطعه در هر سمت: بیرون لبه‌ی شهر تا انتهای بوم (که در مه محو می‌شود)
+        g.fillRect(X(l + s2 * (R / 2 + 0.05)), 0, U(SW), Y(-E / 2));
+        g.fillRect(X(l + s2 * (R / 2 + 0.05)), Y(E / 2), U(SW), S - Y(E / 2));
+        g.fillRect(0, Y(l + s2 * (R / 2 + 0.05)), X(-E / 2), U(SW));
+        g.fillRect(X(E / 2), Y(l + s2 * (R / 2 + 0.05)), S - X(E / 2), U(SW));
+      }
+    }
+    // خط جدول سفید لبه‌ی پیاده‌روهای بیرونی
+    g.fillStyle = 'rgba(255,255,255,.4)';
+    for (const l of lines) {
+      for (const s2 of [-1, 1]) {
+        g.fillRect(X(l + s2 * (R / 2 + SW)), 0, U(0.12), Y(-E / 2));
+        g.fillRect(X(l + s2 * (R / 2 + SW)), Y(E / 2), U(0.12), S - Y(E / 2));
+        g.fillRect(0, Y(l + s2 * (R / 2 + SW)), X(-E / 2), U(0.12));
+        g.fillRect(X(E / 2), Y(l + s2 * (R / 2 + SW)), S - X(E / 2), U(0.12));
+      }
     }
 
     // آسفالت تازه و تیره‌تر روی کل طول جاده‌ها
@@ -1031,14 +1057,23 @@ export class City {
       }
     }
     // جنگل انبوه بیرون شهر — جاده‌ها از توش رد می‌شوند و در مه محو می‌شوند
+    // جنگل واقعی: چند لایه درخت با تراکم بالا — جاده‌ها و پیاده‌روها از توش
+    // رد می‌شوند و بقیه در مه محو می‌شود
     const outer = [];
-    const onRoad = (x, z) => roadLines.some((l) => Math.abs(x - l) < R / 2 + 0.7) || roadLines.some((l) => Math.abs(z - l) < R / 2 + 0.7);
-    for (let i = 0; i < 300; i++) {
-      const a = rand() * Math.PI * 2;
-      const rad = CITY.half + 6 + rand() * 46;
-      const x = Math.cos(a) * rad, z = Math.sin(a) * rad;
-      if (onRoad(x, z)) continue;
-      outer.push([x, z]);
+    const onRoad = (x, z) => roadLines.some((l) => Math.abs(x - l) < R / 2 + 1.4) || roadLines.some((l) => Math.abs(z - l) < R / 2 + 1.4);
+    const tooClose = (x, z, min) => outer.some(([ox, oz]) => Math.abs(ox - x) < min && Math.abs(oz - z) < min);
+    for (let layer = 0; layer < 3; layer++) {
+      const n = layer === 0 ? 420 : layer === 1 ? 380 : 300;
+      const spread = layer === 0 ? 22 : layer === 1 ? 34 : 48;
+      const gap = layer === 0 ? 3.0 : layer === 1 ? 3.6 : 4.4;
+      for (let i = 0; i < n; i++) {
+        const a = rand() * Math.PI * 2;
+        const rad = CITY.half + 5.5 + rand() * spread;
+        const x = Math.cos(a) * rad, z = Math.sin(a) * rad;
+        if (onRoad(x, z)) continue;
+        if (tooClose(x, z, gap)) continue;
+        outer.push([x, z]);
+      }
     }
     // درخت‌های پارک‌ها (سه فضای سبز هسته)
     const parks = [];
@@ -1428,22 +1463,34 @@ export class City {
     return false;
   }
 
-  // بعد از رفتن در مه، از سمت دیگری وارد شهر می‌شود
+  // فاصله‌ی دنیایی نقطه‌ی محلی شهر از دوربین
+  _camDist(c) {
+    const w = this._toWorld(c.x, c.z);
+    const cam = this.world && this.world.camera ? this.world.camera.position : { x: 0, y: 99, z: 0 };
+    return Math.hypot(w.x - cam.x, w.z - cam.z, -cam.y);
+  }
+
+  // بعد از رفتن در مه، از سمت دیگری وارد شهر می‌شود — همیشه از نقطه‌ای که
+  // از دید دوربین دورترین است تا «ظاهر شدن ناگهانی» دیده نشود
   _startEnter(c) {
     const L = this._roadLines();
-    const line = L[Math.floor(Math.random() * L.length)];
-    const vert = Math.random() < 0.5;
-    const sgn = Math.random() < 0.5 ? 1 : -1;   // به سمت شهر
-    const D = 82;
-    if (vert) {
-      c.hx = 0; c.hz = sgn;
-      c.x = line - sgn * this.LANE;
-      c.z = -sgn * D;
-    } else {
-      c.hx = sgn; c.hz = 0;
-      c.x = -sgn * D;
-      c.z = line + sgn * this.LANE;
+    const D = 95;
+    let best = null, bd = -1;
+    for (let k = 0; k < 6; k++) {
+      const line = L[Math.floor(Math.random() * L.length)];
+      const vert = Math.random() < 0.5;
+      const sgn = Math.random() < 0.5 ? 1 : -1;   // به سمت شهر
+      const cand = vert
+        ? { vert, sgn, line, x: line - sgn * this.LANE, z: -sgn * D }
+        : { vert, sgn, line, x: -sgn * D, z: line + sgn * this.LANE };
+      const d = this._camDist(cand);
+      if (d > bd) { bd = d; best = cand; }
     }
+    const { vert, sgn, line } = best;
+    c.hx = vert ? 0 : sgn;
+    c.hz = vert ? sgn : 0;
+    c.x = best.x;
+    c.z = best.z;
     c.cur = Math.min(c.speed, 2.6);
     c.angle = Math.atan2(c.hx, c.hz);
     c.obj.rotation.y = c.angle;
@@ -1459,6 +1506,8 @@ export class City {
     for (const c of cars) {
       if ((c.state === 'straight' || c.state === 'dispatch') && c.nextC) {
         const dc = (c.nextC.x - c.x) * c.hx + (c.nextC.z - c.z) * c.hz;
+        // تصمیمی که بیرون از محدوده‌ی تقاطع معلق مانده → باطل (ضدِ قفل دائمی)
+        if (dc > this.D_IN + 0.3 && c._decidedFor === c.nextC) c._decidedFor = null;
         if (dc <= this.D_IN) this._approachIntersection(c, dt);
       } else if (c.state === 'straight' && !c.nextC) {
         // ایمنی: جاده تمام شد → از شهر خارج شو
@@ -1596,7 +1645,8 @@ export class City {
           c.x += c.hx * adv;
           c.z += c.hz * adv;
         }
-        if (c.state === 'exiting' && Math.max(Math.abs(c.x), Math.abs(c.z)) > this._exitR) {
+        if (c.state === 'exiting' && this._camDist(c) > 112) {
+          // فقط وقتی از دید دوربین کاملاً در مه است — نه اینکه روی صفحه محو شود
           this._startEnter(c);
         }
         c._p = { x: c.x, z: c.z, hx: c.hx, hz: c.hz };
@@ -1632,6 +1682,71 @@ export class City {
       }
     } else {
       this._updateParking(dt, t);
+    }
+    // آدمک‌هایی که به درِ خانه می‌روند و داخل می‌شوند
+    this._visitT -= dt;
+    if (this._visitT <= 0) {
+      this._visitT = 7 + Math.random() * 9;
+      this._startVisit();
+    }
+    this._updateVisitors(dt, t);
+  }
+
+  // یک آدمک از کنار جاده به درِ خانه می‌رود، چند لحظه داخل می‌ماند و برمی‌گردد
+  _startVisit() {
+    if (this.visitors.length >= 4) return;
+    if (!this._spotsReady) {
+      this._spotsReady = true;
+      this.parkingSpots = this.parkingSpots.filter((sp) =>
+        !this.parkedStatic.some((p) => Math.hypot(p.x - sp.x, p.z - sp.z) < 2.6));
+    }
+    if (!this.parkingSpots.length) return;
+    const sp = this.parkingSpots[Math.floor(Math.random() * this.parkingSpots.length)];
+    const per = this._person();
+    const x = sp.x + (Math.random() - 0.5) * 0.8;
+    const z = sp.z + (Math.random() < 0.5 ? -1 : 1) * (0.6 + Math.random() * 0.6);
+    per.g.position.set(x, 0.06, z);
+    this.group.add(per.g);
+    this.visitors.push({
+      ...per, x, z,
+      tx: sp.door.x + (Math.random() - 0.5) * 0.5,
+      tz: sp.door.z,
+      sx: x, sz: z,
+      phase: 'toDoor', t: 0, stay: 12 + Math.random() * 38,
+    });
+  }
+
+  _updateVisitors(dt, t) {
+    for (let i = this.visitors.length - 1; i >= 0; i--) {
+      const v = this.visitors[i];
+      v.t += dt;
+      let tx = v.tx, tz = v.tz;
+      if (v.phase === 'toDoor' || v.phase === 'back') {
+        if (v.phase === 'back') { tx = v.sx; tz = v.sz; }
+        const d = Math.hypot(tx - v.x, tz - v.z);
+        if (d > 0.12) {
+          const st = Math.min((0.85 + Math.random() * 0.001) * dt, d);
+          v.x += (tx - v.x) / d * st;
+          v.z += (tz - v.z) / d * st;
+          v.g.position.set(v.x, 0.06, v.z);
+          v.g.rotation.y = Math.atan2(tx - v.x, tz - v.z);
+          const swing = Math.sin(t * 8.5);
+          v.legL.rotation.x = swing * 0.5; v.legR.rotation.x = -swing * 0.5;
+          v.armL.rotation.x = -swing * 0.35; v.armR.rotation.x = swing * 0.35;
+        } else if (v.phase === 'toDoor') {
+          v.g.visible = false;          // وارد خانه شد
+          v.phase = 'inside'; v.t = 0;
+        } else {
+          this.group.remove(v.g);       // رفت
+          this.visitors.splice(i, 1);
+          continue;
+        }
+      } else if (v.phase === 'inside') {
+        if (v.t > v.stay) {
+          v.g.visible = true;           // از خانه آمد بیرون
+          v.phase = 'back'; v.t = 0;
+        }
+      }
     }
   }
 
@@ -1745,9 +1860,14 @@ export class City {
           car.state = 'straight';
           car.cur = 0.35;
           car._target = car.speed;
+          // مسیر و تصمیم تازه — وگرنه تصمیمِ معلقِ قدیمی ماشین را برای همیشه نگه می‌دارد
+          car.nextC = this._nextCross(car.x, car.z, car.hx, car.hz);
+          car._decidedFor = null;
         }
         A.police._dest = null;
         if (A.police.state === 'dispatch') A.police.state = 'straight';
+        A.police.nextC = this._nextCross(A.police.x, A.police.z, A.police.hx, A.police.hz);
+        A.police._decidedFor = null;
         if (A.police.lights) { A.police.lights.bar.visible = false; A.police.lights.red.visible = true; A.police.lights.blue.visible = true; }
         this.accident = null;
       }
@@ -1897,13 +2017,20 @@ export class City {
         // قبل از پا گذاشتن روی جاده، اگر ماشین نزدیک می‌آید صبر می‌کند
         let hold = false;
         if (cr.prog < 0.3) {
+          cr._holdT = (cr._holdT || 0) + dt;
           for (const c of this.cars) {
             if (!c._p) continue;
             if (c.state === 'crashed' || c.state === 'parked' || c.state === 'toPark' || c.state === 'away') continue;
             const d = Math.hypot(c.x - cr.x, c.z - cr.z);
-            if (d < 2.2 || (d < 6.2 && c.cur > 0.25)) { hold = true; break; }
+            if (d < 2.2 || (d < 6.2 && c.cur > 0.25)) {
+              // ماشینِ کاملاً ایستاده عابر را برای همیشه نگه نمی‌دارد (ضدِ قفل دایره‌ای:
+              // عابرِ ساکن مانعِ ماشین است و ماشینِ ساکن مانعِ عابر — هیچ‌کدام رد نمی‌شدند)
+              if (c.cur > 0.05) { hold = true; break; }
+            }
           }
-        }
+          // بعد از ۱۰ ثانیه انتظار، عابر رد می‌شود؛ ماشین‌ها برای عابرِ روی خط می‌ایستند
+          if (cr._holdT > 10) hold = false;
+        } else cr._holdT = 0;
         if (!hold) cr.prog = Math.min(1, cr.prog + (cr.speed * dt) / len);
         const q = cr.back ? 1 - cr.prog : cr.prog;
         const x = cr.ax + (cr.bx - cr.ax) * q;
