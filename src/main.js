@@ -13,7 +13,8 @@ const canvas = document.getElementById('scene');
 const world = new World(canvas);
 const ui = new UI(world);
 const city = new City(world, ui);
-city.init().catch((e) => console.warn('city:', e));
+// init تا آخرِ لودِ همه‌ی مدل‌ها resolve نمی‌شود
+const cityReady = city.init().catch((e) => console.warn('city:', e));
 ui.city = city;
 
 // نمای آغازین: هسته‌ی شهر از کمی دورتر (روی موبایل عمودی بازتر)
@@ -34,12 +35,13 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-// صفحه‌ی لودینگ تا آمدن ساختمان‌های اصلی می‌ماند (حداکثر چند ثانیه) تا شهر «نیمه‌کاره» دیده نشود؛
-// بقیه‌ی مدل‌ها (خانه‌ها، ماشین‌ها، درخت‌ها) تدریجی اضافه می‌شوند.
+// صفحه‌ی لودینگ تا لود کاملِ «همه‌ی» مدل‌ها می‌ماند (درست برای شبکه‌های کند) تا
+// هیچ ساختمانِ نصفه‌کاره یا پرشی دیده نشود؛ درصد پیشرفت از loader.js می‌آید.
+// اگر شبکه فوق‌العاده کند بود، بعد از ۶۰ ثانیه به‌هرحال بازی باز می‌شود.
 const booted = () => { window.__LUKO_BOOTED__ = true; };
 Promise.race([
-  city.coreReady,
-  new Promise((r) => setTimeout(r, 6000)),
+  cityReady,
+  new Promise((r) => setTimeout(r, 60000)),
 ]).then(booted, booted);
 
 // ================= ورودی: کشیدن نقشه، پینچ، کلیک روی ساختمان‌ها =================

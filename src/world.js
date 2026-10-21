@@ -7,7 +7,7 @@ const VIEW_HEIGHT = 18.5;      // ارتفاع دید ارتوگرافیک
 const CAM_POS = new THREE.Vector3(0, 13.5, 11.8);
 const CAM_TARGET = new THREE.Vector3(0, 0, 0);
 // زوم متعادل: نه خیلی نزدیک، نه خیلی دور — همیشه بشود مدیریت کرد
-const ZOOM_MIN = 0.36;
+const ZOOM_MIN = 0.44;
 const ZOOM_MAX = 1.6;
 // زاویه‌ی دوربین نسبت به زمین (برای نشاندن اسپریت‌های ایزومتریک روی زمین لازم است)
 const CAM_PITCH_SIN = CAM_POS.y / Math.hypot(CAM_POS.y, CAM_POS.z);
@@ -27,9 +27,13 @@ export class World {
     sun.position.set(6, 14, 7);
     this.scene.add(sun);
 
-    this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
+    this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 320);
     this.camera.position.copy(CAM_POS);
     this.camera.lookAt(CAM_TARGET);
+
+    // مه‌ی ملایم هم‌رنگ چمن: افق و لبه‌ی دور شهر در سبزی محو می‌شود تا
+    // نقشه «بی‌پایان» به نظر برسد و پایان جاده‌ها معلوم نشود
+    this.scene.fog = new THREE.Fog(0x7ec850, 30, 62);
 
     this.loader = new THREE.TextureLoader(sharedManager);
     this.texCache = new Map();
@@ -85,7 +89,7 @@ export class World {
     grass.colorSpace = THREE.SRGBColorSpace;
     const mat = new THREE.MeshBasicMaterial({ map: grass });
     // زمین بزرگ چمنی که شهر رویش ساخته می‌شود
-    this.ground = new THREE.Mesh(new THREE.PlaneGeometry(260, 260), mat);
+    this.ground = new THREE.Mesh(new THREE.PlaneGeometry(430, 430), mat);
     this.ground.rotation.x = -Math.PI / 2;
     this.ground.position.set(0, 0, 0);
     this.ground.renderOrder = -1000;

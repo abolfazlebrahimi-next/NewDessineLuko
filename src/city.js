@@ -75,8 +75,44 @@ export class City {
     this.R = CITY.road;
     this._shadowMat = null;
     this._modelCache = new Map();
+    this.parkingSpots = [];      // جای پارکِ ماشین‌روی خانه‌ها (برای رویداد پارک)
+    this.parkedStatic = [];      // ماشین‌های پارک‌شده‌ی ثابت (جای پارک آزاد پیدا شود)
+    this.crossers = [];          // عابرهای خط عابر پیاده
+    this.accident = null;        // رویداد تصادف + پلیس
+    this.parkEvent = null;       // رویداد پارک و پیاده‌شدن راننده
+    this._kindMap = this._buildKindMap();
+    // پیش‌فرض‌های ترافیک (تا قبل از _buildCars هم update امن باشد)
+    this._outerH = Infinity;
+    this._exitR = 78;
+    this._outsideCount = 0;
+    this._accidentT = 9999;
+    this._parkT = 9999;
     // تا ساختمان‌های اصلی (عکس‌ها) نیامده‌اند، صفحه‌ی لودینگ می‌ماند
     this.coreReady = Promise.resolve();
+  }
+
+  // نقشه‌ی انواع بلوک: سبک ساختمان‌ها (مسکونی/تجاری/صنعتی) کاملاً در هم می‌شوند
+  // تا شهر یکدست باشد و یک سمتش «سبز» و سمت دیگرش سبکِ دیگر نباشد.
+  _buildKindMap() {
+    const m = new Map();
+    for (let c = -CITY.range; c <= CITY.range; c++) {
+      for (let r = -CITY.range; r <= CITY.range; r++) {
+        const ring = Math.max(Math.abs(c), Math.abs(r));
+        let kind;
+        if (ring <= 1) {
+          kind = ((c === -1 && r === 1) || (c === 0 && r === -1) || (c === 0 && r === 1)) ? 'lawn' : 'core';
+        } else if (c === -CITY.range && r === -CITY.range) {
+          kind = 'water';
+        } else if (c === CITY.range && r === CITY.range) {
+          kind = 'containers';
+        } else {
+          const x = rand();
+          kind = x < 0.48 ? 'suburb' : x < 0.82 ? 'commercial' : 'industrial';
+        }
+        m.set(c + ',' + r, kind);
+      }
+    }
+    return m;
   }
 
   // مختصات محلی شهر ← مختصات جهان (برای اسپریت‌ها و برچسب‌هایی که بیرون گروه‌اند)
@@ -86,22 +122,19 @@ export class City {
   }
 
   // نوع هر بلوک شهر
-  //  core: ساختمان اصلی | lawn: فضای سبز | commercial: مرکز شهر/آسمان‌خراش (Commercial)
-  //  suburb: محله‌ی مسکونی (Suburban) | industrial: حاشیه‌ی صنعتی (Industrial)
+  //  core: ساختمان اصلی | lawn: فضای سبز | commercial: تجاری/آسمان‌خراش (Commercial)
+  //  suburb: محله‌ی مسکونی (Suburban) | industrial: صنعتی (Industrial)
   //  water/containers: بلوک‌های ویژه‌ی صنعتی
-  // چیدمان از دید دوربین (جنوب): جلو خانه‌ها، وسط ساختمان‌های اصلی، پشت مرکز شهر و خطِ آسمان
+  // سبک‌ها از قبل در _buildKindMap به‌صورت درهم (میکس) انتخاب شده‌اند.
   blockKind(c, r) {
+    const k = this._kindMap && this._kindMap.get(c + ',' + r);
+    if (k) return k;
     const ring = Math.max(Math.abs(c), Math.abs(r));
     if (ring <= 1) {
       if ((c === -1 && r === 1) || (c === 0 && r === -1) || (c === 0 && r === 1)) return 'lawn';
       return 'core';
     }
-    if (c === -3 && r === -3) return 'water';
-    if (c === 3 && r === 3) return 'containers';
-    if (ring === 2) return r < 0 ? 'commercial' : 'suburb';
-    if (r === -3) return 'commercial';
-    if (r >= 2) return 'suburb';
-    return 'industrial';
+    return 'suburb';
   }
 
   async init() {
@@ -124,22 +157,23 @@ export class City {
   }
 
   // ---------- زمین شهر: یک بافت بزرگ نقاشی‌شده (خیابان/پیاده‌رو/بلوک) ----------
+  // ناحیه‌ی شهری + حاشیه‌ی «بیرون‌پوشه»: جاده‌ها از شهر بیرون می‌روند و در مه و
+  // جنگل محو می‌شوند تا پایانشان دیده نشود (زمین بیرون شهر شفاف است و چمنِ خود
+  // نقشه از زیرش پیدا می‌شود).
   _buildGround() {
     const { P, B, R } = this;
     const range = CITY.range;
     const E = (range * 2 + 1) * P + R;        // اندازه‌ی ناحیه‌ی شهری
-    const S = 2048, k = S / E;
-    const X = (x) => (x + E / 2) * k;
-    const Y = (z) => (z + E / 2) * k;
+    const EXT = 48;                            // طول بیرون‌پوشه (ادامه‌ی جاده‌ها)
+    const E2 = E + EXT * 2;
+    const S = 2560, k = S / E2;
+    const X = (x) => (x + E2 / 2) * k;
+    const Y = (z) => (z + E2 / 2) * k;
     const U = (u) => u * k;
 
     const c = document.createElement('canvas');
     c.width = c.height = S;
     const g = c.getContext('2d');
-
-    // سنگفرش پایه
-    g.fillStyle = '#bcc0c9';
-    g.fillRect(0, 0, S, S);
 
     const grassDots = (bx, by, bs, n) => {
       for (let i = 0; i < n; i++) {
@@ -150,7 +184,43 @@ export class City {
       }
     };
 
-    // کف بلوک‌ها
+    // مسیر همه‌ی خیابان‌ها (تا بیرون شهر ادامه دارند)
+    const lines = [];
+    for (let i = -range - 1; i <= range; i++) lines.push((i + 0.5) * P);
+    const roadRects = [];
+    for (const l of lines) {
+      roadRects.push([X(l - R / 2), 0, U(R), S]);
+      roadRects.push([0, Y(l - R / 2), S, U(R)]);
+    }
+
+    // آسفالت تازه و تیره‌تر روی کل طول جاده‌ها
+    g.fillStyle = '#474b54';
+    for (const [x, y, w, h] of roadRects) g.fillRect(x, y, w, h);
+    // بافت آسفالت + لکه‌های ترمیمی ملایم (فقط روی آسفالت)
+    g.save();
+    g.beginPath();
+    for (const [x, y, w, h] of roadRects) g.rect(x, y, w, h);
+    g.clip();
+    for (let i = 0; i < 3400; i++) {
+      g.fillStyle = `rgba(255,255,255,${0.02 + rand() * 0.045})`;
+      g.fillRect(rand() * S, rand() * S, 2.5, 2.5);
+    }
+    for (let i = 0; i < 90; i++) { // وصله‌های آسفالت تیره‌تر
+      const l = pickOf(lines), along = -E2 / 2 + rand() * E2, vert = rand() < 0.5;
+      const w = U(0.5 + rand() * 0.9), h = U(2 + rand() * 5);
+      g.fillStyle = `rgba(20,22,26,${0.10 + rand() * 0.12})`;
+      if (vert) g.fillRect(X(l - R / 2 + rand() * (R - 0.6) + 0.3) - w / 2, Y(along) - h / 2, w, h);
+      else g.fillRect(X(along) - h / 2, Y(l - R / 2 + rand() * (R - 0.6) + 0.3) - w / 2, h, w);
+    }
+    g.restore();
+
+    // کف بلوک‌های شهر (فقط داخل ناحیه‌ی شهری)
+    g.save();
+    g.beginPath();
+    g.rect(X(-E / 2), Y(-E / 2), U(E), U(E));
+    g.clip();
+    g.fillStyle = '#bcc0c9';
+    g.fillRect(X(-E / 2), Y(-E / 2), U(E), U(E));
     const tones = ['#ccd0d8', '#c3c8d3', '#d3d6de'];
     for (let col = -range; col <= range; col++) {
       for (let row = -range; row <= range; row++) {
@@ -198,70 +268,75 @@ export class City {
         g.strokeRect(bx, by, bs, bs);
       }
     }
+    g.restore();
 
-    // آسفالت خیابان‌ها
-    const lines = [];
-    for (let i = -range - 1; i <= range; i++) lines.push((i + 0.5) * P);
-    g.fillStyle = '#525762';
+    // بازه‌های آزاد بین تقاطع‌ها روی کل طول جاده (شهر + بیرون‌پوشه)
+    const dashSpans = (l) => {
+      // بازه‌های مجاز در راستای عمود بر جاده: همه‌ی طول منهای جعبه‌ی تقاطع‌ها
+      const out = [];
+      let cursor = -E2 / 2;
+      const cuts = lines.map((m) => [m - R / 2 - 1.3, m + R / 2 + 1.3]).sort((a, b) => a[0] - b[0]);
+      for (const [a, b] of cuts) {
+        if (a > cursor) out.push([cursor, a]);
+        cursor = Math.max(cursor, b);
+      }
+      if (cursor < E2 / 2) out.push([cursor, E2 / 2]);
+      return out;
+    };
+
+    // خط کناری + خط‌چین وسط
     for (const l of lines) {
-      g.fillRect(X(l - R / 2), 0, U(R), S);
-      g.fillRect(0, Y(l - R / 2), S, U(R));
-    }
-    // بافت آسفالت
-    for (let i = 0; i < 2600; i++) {
-      g.fillStyle = `rgba(255,255,255,${0.02 + rand() * 0.04})`;
-      g.fillRect(rand() * S, rand() * S, 2.5, 2.5);
-    }
-
-    // بازه‌های آزاد بین تقاطع‌ها (برای خط‌کشی تمیز)
-    const spans = lines.map(l => [l - R / 2, l + R / 2]);
-    const gaps = [];
-    let cursor = -E / 2;
-    for (const [a, b] of spans) { if (a > cursor) gaps.push([cursor, a]); cursor = Math.max(cursor, b); }
-    if (cursor < E / 2) gaps.push([cursor, E / 2]);
-
-    // خط کناری + خط‌چین وسط (فقط بین تقاطع‌ها)
-    for (const l of lines) {
-      for (const [g0, g1] of gaps) {
-        if (g1 - g0 < 0.6) continue;
+      for (const [g0, g1] of dashSpans(l)) {
+        if (g1 - g0 < 0.7) continue;
         g.fillStyle = 'rgba(242,243,245,.92)';
         g.fillRect(X(l - R / 2 + 0.2), Y(g0), U(0.14), U(g1 - g0));
         g.fillRect(X(l + R / 2 - 0.34), Y(g0), U(0.14), U(g1 - g0));
         g.fillRect(X(g0), Y(l - R / 2 + 0.2), U(g1 - g0), U(0.14));
         g.fillRect(X(g0), Y(l + R / 2 - 0.34), U(g1 - g0), U(0.14));
         g.fillStyle = '#f0f0ea';
-        for (let d = g0 + 0.35; d + 1.05 < g1; d += 2.0) {
-          g.fillRect(X(l - 0.09), Y(d), U(0.18), U(1.05));
-          g.fillRect(X(d), Y(l - 0.09), U(1.05), U(0.18));
+        for (let d = g0 + 0.4; d + 1.0 < g1; d += 1.9) {
+          g.fillRect(X(l - 0.09), Y(d), U(0.18), U(1.0));
+          g.fillRect(X(d), Y(l - 0.09), U(1.0), U(0.18));
         }
       }
     }
 
-    // خط عابر پیاده
-    g.fillStyle = 'rgba(245,245,240,.92)';
+    // خط عابر پیاده‌ی واضح (راه‌راه) + خط توقف — همه‌ی تقاطع‌های شهر
+    const CW_OFF = R / 2 + 0.62;   // فاصله‌ی مرکز خط عابر از مرکز جاده
+    this._cwOff = CW_OFF;
+    g.fillStyle = 'rgba(247,247,242,.95)';
     for (const lx of lines) for (const lz of lines) {
-      if (Math.abs(lx) > 2.5 * P + 0.1 || Math.abs(lz) > 2.5 * P + 0.1) continue;
-      const sw = (R - 0.8) / 4;
-      for (let i = 0; i < 4; i++) {
-        const off = -R / 2 + 0.4 + i * sw;
-        g.fillRect(X(lx + off), Y(lz - R / 2 - 1.05), U(sw * 0.62), U(0.85));
-        g.fillRect(X(lx + off), Y(lz + R / 2 + 0.2), U(sw * 0.62), U(0.85));
-        g.fillRect(X(lx - R / 2 - 1.05), Y(lz + off), U(0.85), U(sw * 0.62));
-        g.fillRect(X(lx + R / 2 + 0.2), Y(lz + off), U(0.85), U(sw * 0.62));
+      if (Math.abs(lx) > 3.5 * P + 0.1 || Math.abs(lz) > 3.5 * P + 0.1) continue;
+      const stripes = 5;
+      const sw = (R - 0.9) / stripes;
+      for (let i = 0; i < stripes; i++) {
+        const off = -R / 2 + 0.45 + i * sw;
+        g.fillRect(X(lx + off), Y(lz - CW_OFF - 0.42), U(sw * 0.6), U(0.84));
+        g.fillRect(X(lx + off), Y(lz + CW_OFF - 0.42), U(sw * 0.6), U(0.84));
+        g.fillRect(X(lx - CW_OFF - 0.42), Y(lz + off), U(0.84), U(sw * 0.6));
+        g.fillRect(X(lx + CW_OFF - 0.42), Y(lz + off), U(0.84), U(sw * 0.6));
       }
+      // خط توقف (سمت راستِ هر رویکرد، قبل از خط عابر)
+      g.fillStyle = 'rgba(242,243,245,.9)';
+      for (const s of [-1, 1]) {
+        // عبور از خیابان عمودی lx: توقف جنوبی/شمالی
+        g.fillRect(X(lx + (s < 0 ? 0.25 : -R / 2 + 0.3)), Y(lz + s * (CW_OFF + 0.75)), U(R / 2 - 0.55), U(0.22));
+        g.fillRect(X(lx + s * (CW_OFF + 0.75)), Y(lz + (s < 0 ? 0.25 : -R / 2 + 0.3)), U(0.22), U(R / 2 - 0.55));
+      }
+      g.fillStyle = 'rgba(247,247,242,.95)';
     }
 
     // حاشیه‌ی شهر
     g.strokeStyle = '#8f9286';
     g.lineWidth = U(0.55);
-    g.strokeRect(U(0.27), U(0.27), S - U(0.54), S - U(0.54));
+    g.strokeRect(X(-E / 2) + U(0.27), Y(-E / 2) + U(0.27), U(E) - U(0.54), U(E) - U(0.54));
 
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = Math.min(8, this.world.renderer?.capabilities?.getMaxAnisotropy?.() || 4);
     const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(E, E),
-      new THREE.MeshBasicMaterial({ map: tex }),
+      new THREE.PlaneGeometry(E2, E2),
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: 0.05 }),
     );
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = 0.02;
@@ -597,6 +672,11 @@ export class City {
             const dwx = hx + side * 1.45;
             put('driveway-long', { x: dwx, z: cz + face * 3.75, rot, scale: K, y: 0.05 });
             put('driveway-long', { x: dwx, z: cz + face * 4.95, rot, scale: K, y: 0.05 });
+            // جای پارکِ رویداد «راننده می‌آید خانه» + درِ خانه برای پیاده‌شدن
+            this.parkingSpots.push({
+              x: dwx, z: cz + face * 4.85, rot,
+              door: { x: hx - side * 0.55, z: hz + face * 0.75 },
+            });
             put(rand() < 0.5 ? 'path-long' : 'path-stones-long', { x: hx - side * 0.35, z: cz + face * 3.75, rot, scale: K, y: 0.05 });
             // نرده‌ی چوبی لب حیاط (با جای خالی برای ماشین‌رو)
             const fz = cz + face * 4.4;
@@ -811,11 +891,13 @@ export class City {
   async _buildCars() {
     const { P, B } = this;
     const loops = [0.5 * P, 1.5 * P, 2.5 * P, 3.5 * P];
-    const SPEED = (n) => (/kart/.test(n) ? 7 + rand() * 2.5
-      : /race/.test(n) ? 8.5 + rand() * 2.5
-      : /tractor/.test(n) ? 2.6
-      : /truck|van|firetruck|garbage|delivery|suv/.test(n) ? 3.6 + rand() * 1.3
-      : 4.6 + rand() * 2.4);
+    // سرعت پایه — تقریباً نصفِ قبل؛ کارت‌ها تندتر، بقیه آرام شهری
+    const SPEED = (n) => (/kart/.test(n) ? 2.6 + rand() * 0.6
+      : /race/.test(n) ? 3.1 + rand() * 0.7
+      : /tractor/.test(n) ? 1.6
+      : /police/.test(n) ? 2.6
+      : /truck|van|firetruck|garbage|delivery|suv/.test(n) ? 1.9 + rand() * 0.5
+      : 2.4 + rand() * 0.7);
     const TWICE = new Set(['sedan', 'taxi', 'suv', 'hatchback-sports', 'van', 'sedan-sports', 'suv-luxury']);
     // ماشین موضوعی جلوی هر ساختمان اصلی
     const THEMED = [
@@ -856,10 +938,25 @@ export class City {
         obj: g, wheels, wheelR, h,
         dist: per / CITY.cars.length * i + rand() * 6,
         angle: 0,
-        speed: SPEED(name),
+        speed: SPEED(name), cur: 0, state: null, name,
         dir: i % 2 === 0 ? 1 : -1,
         lane: this.R / 4 - 0.12,
       });
+      // پلیس: چراغ گردان قرمز/آبی روی سقف
+      if (name === 'police') {
+        const car = this.cars[this.cars.length - 1];
+        const bar = new THREE.Group();
+        const mk = (x, color) => {
+          const m = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.07, 0.13), new THREE.MeshBasicMaterial({ color }));
+          m.position.set(x, 0.62, 0.04);
+          return m;
+        };
+        const red = mk(-0.13, 0xff2d2d), blue = mk(0.13, 0x3a7bff);
+        bar.add(red, blue);
+        bar.visible = false;
+        g.add(bar);
+        car.lights = { bar, red, blue };
+      }
     };
     const parkedBlobs = [];
     const makeParked = (scene, x, z, rot, name = 'sedan') => {
@@ -868,6 +965,7 @@ export class City {
       obj.rotation.y = rot;
       this.group.add(obj);
       parkedBlobs.push([x, z, 2.2, 3.4]);
+      this.parkedStatic.push({ x, z });
     };
 
     await Promise.allSettled(CITY.cars.map(async (name, i) => {
@@ -902,40 +1000,48 @@ export class City {
     if (scenes.van) makeParked(scenes.van, 3 * P - 3.2, -3 * P + B / 2 - 1.4, Math.PI + 0.05, 'van');
     this._blobs(parkedBlobs);
 
-    // مخروط‌های راهنمایی از پکیج ماشین
-    try {
-      const cone = await this._loadGLB(assetUrl(CITY.carBase + 'cone.glb'));
-      [[0.5 * P + 1.1, -0.5 * P], [0.5 * P + 1.1, -0.5 * P + 1.3], [-1.5 * P - 1.1, 0.5 * P], [-1.5 * P - 1.1, 0.5 * P - 1.3]]
-        .forEach(([x, z]) => {
-          const o = this._normalized(cone.clone(true), 0.34, 9);
-          o.position.set(x, 0.05, z);
-          this.group.add(o);
-        });
-    } catch (e) { /* ok */ }
+    // زمان‌بندی رویدادها: خروج از شهر، تصادف، پارک منزل
+    this._outerH = loops[loops.length - 1];
+    this._exitR = 78;             // بعد از این شعاع، ماشین «در مه» است و برمی‌گردد داخل
+    this._outsideCount = 0;
+    this._accidentT = 16 + Math.random() * 14;
+    this._parkT = 9 + Math.random() * 10;
   }
 
   // ---------- درخت‌ها، سنگ‌ها و علف (Kenney Survival Kit — همان پکیج محصول قبلی) ----------
   async _buildNature() {
     const { P, R } = this;
     const street = [];
-    // ردیف‌های منظم درخت در دو طرف هر خیابان
+    // ردیف‌های منظم درخت در دو طرف هر خیابان — نه روی خط عابر پیاده و نه جلوی آن
+    const roadLines = [];
+    for (let i = -4; i <= 3; i++) roadLines.push((i + 0.5) * P);
+    const nearCross = (v) => roadLines.some((l) => Math.abs(v - l) < R / 2 + 1.85);
     for (const l of [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5]) {
       const line = l * P;
       let k = 0;
       for (let t = -3 * P + 2; t <= 3 * P - 1.5; t += 3.9, k++) {
         const off = (k % 2) * 1.95;
-        street.push([line - R / 2 - 0.75, t + off]);
-        street.push([line + R / 2 + 0.75, t + 1.95 - off]);
-        street.push([t + off, line - R / 2 - 0.75]);
-        street.push([t + 1.95 - off, line + R / 2 + 0.75]);
+        for (const [sx, sz] of [
+          [line - R / 2 - 0.95, t + off], [line + R / 2 + 0.95, t + 1.95 - off],
+          [t + off, line - R / 2 - 0.95], [t + 1.95 - off, line + R / 2 + 0.95],
+        ]) {
+          // کنار تقاطع‌ها (خط عابر و گوشه‌ی روبه‌رو) خالی بماند
+          if (nearCross(sx) && nearCross(sz)) continue;
+          if (nearCross(sz) && Math.abs(sx - line) < R / 2 + 2.6) continue;
+          if (nearCross(sx) && Math.abs(sz - line) < R / 2 + 2.6) continue;
+          street.push([sx, sz]);
+        }
       }
     }
-    // حلقه‌ی درخت روی چمن بیرون شهر
+    // جنگل انبوه بیرون شهر — جاده‌ها از توش رد می‌شوند و در مه محو می‌شوند
     const outer = [];
-    for (let i = 0; i < 70; i++) {
+    const onRoad = (x, z) => roadLines.some((l) => Math.abs(x - l) < R / 2 + 0.7) || roadLines.some((l) => Math.abs(z - l) < R / 2 + 0.7);
+    for (let i = 0; i < 300; i++) {
       const a = rand() * Math.PI * 2;
-      const rad = CITY.half + 7 + rand() * 18;
-      outer.push([Math.cos(a) * rad, Math.sin(a) * rad]);
+      const rad = CITY.half + 6 + rand() * 46;
+      const x = Math.cos(a) * rad, z = Math.sin(a) * rad;
+      if (onRoad(x, z)) continue;
+      outer.push([x, z]);
     }
     // درخت‌های پارک‌ها (سه فضای سبز هسته)
     const parks = [];
@@ -980,12 +1086,12 @@ export class City {
       for (let i = 0; i < 4; i++) rocks.push({ x: cx + (rand() - 0.5) * 8.5, z: cz + (rand() - 0.5) * 8.5, y: 0.03, rot: rand() * 6.28, foot: 0.5 + rand() * 0.4 });
       for (let i = 0; i < 14; i++) grass.push({ x: cx + (rand() - 0.5) * 9, z: cz + (rand() - 0.5) * 9, y: 0.03, rot: rand() * 6.28, scale: 1.2 + rand() * 0.8 });
     }
-    for (let i = 0; i < 26; i++) {
-      const a = rand() * Math.PI * 2, rad = CITY.half + 5 + rand() * 22;
+    for (let i = 0; i < 46; i++) {
+      const a = rand() * Math.PI * 2, rad = CITY.half + 6 + rand() * 40;
       rocks.push({ x: Math.cos(a) * rad, z: Math.sin(a) * rad, y: 0, rot: rand() * 6.28, foot: 0.7 + rand() * 0.9 });
     }
-    for (let i = 0; i < 60; i++) {
-      const a = rand() * Math.PI * 2, rad = CITY.half + 4 + rand() * 24;
+    for (let i = 0; i < 110; i++) {
+      const a = rand() * Math.PI * 2, rad = CITY.half + 5 + rand() * 42;
       grass.push({ x: Math.cos(a) * rad, z: Math.sin(a) * rad, y: 0, rot: rand() * 6.28, scale: 1.4 + rand() * 1.2 });
     }
     await Promise.allSettled([
@@ -1121,6 +1227,407 @@ export class City {
       this.group.add(p.g);
       this.peds.push({ ...p, stand: true, baseRy: ry, phase: rand() * 6 });
     }
+
+    // عابرهایی که فقط از خط عابرِ تقاطع‌ها رد می‌شوند و منتظر ماشین می‌مانند
+    const roadLines = [];
+    for (let i = -4; i <= 3; i++) roadLines.push((i + 0.5) * P);
+    const CW = this.R / 2 + 0.62;
+    for (let i = 0; i < 12; i++) {
+      const lx = pickOf(roadLines), lz = pickOf(roadLines);
+      const vert = rand() < 0.5;                  // عبور در راستای z (از روی جاده‌ی افقی)
+      const cwSide = rand() < 0.5 ? -1 : 1;       // کدام خط عابرِ تقاطع
+      const ax = vert ? lx + cwSide * CW : lx - CW - 0.95;
+      const az = vert ? lz - CW - 0.95 : lz + cwSide * CW;
+      const bx = vert ? ax : lx + CW + 0.95;
+      const bz = vert ? lz + CW + 0.95 : az;
+      const p = this._person();
+      p.g.position.set(ax, 0.06, az);
+      this.group.add(p.g);
+      this.crossers.push({
+        ...p, lx, lz, vert, ax, az, bx, bz, x: ax, z: az,
+        phase: 'wait', t: 1 + rand() * 5, prog: 0, back: false,
+        speed: 0.85 + rand() * 0.35, baseRy: 0,
+      });
+    }
+  }
+
+  // ---------- ترافیک: فاصله‌گیری، توقف برای عابر، خروج/ورود به شهر ----------
+  // نزدیک‌ترین پارامتر مسیر مستطیلی به یک نقطه (برای تصادف و اعزام پلیس)
+  _distForPoint(h, dir, lane, x, z) {
+    const corners = [[-h, -h], [h, -h], [h, h], [-h, h]];
+    if (dir < 0) corners.reverse();
+    let best = 0, bestD = Infinity, base = 0;
+    for (let i = 0; i < 4; i++) {
+      const a = corners[i], b = corners[(i + 1) % 4];
+      const ux = (b[0] - a[0]) / (2 * h), uz = (b[1] - a[1]) / (2 * h);
+      const ax = a[0] - uz * lane, az = a[1] + ux * lane;
+      const t = Math.max(0, Math.min(2 * h, (x - ax) * ux + (z - az) * uz));
+      const px = ax + ux * t, pz = az + uz * t;
+      const d = (px - x) * (px - x) + (pz - z) * (pz - z);
+      if (d < bestD) { bestD = d; best = base + t; }
+      base += 2 * h;
+    }
+    return best;
+  }
+
+  _updateTraffic(dt, t) {
+    const cars = this.cars;
+
+    // گروه‌بندی حلقه‌ها؛ ماشین‌های خراب هم مانع حساب می‌شوند
+    const groups = new Map();
+    for (const c of cars) {
+      if (c.state !== null && c.state !== 'crashed' && c.state !== 'dispatch') continue;
+      const key = c.h + '|' + c.dir;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(c);
+    }
+    for (const list of groups.values()) {
+      const L = 8 * list[0].h;
+      const nd = (d) => ((d % L) + L) % L;
+      list.sort((a, b) => nd(a.dist) - nd(b.dist));
+      for (let i = 0; i < list.length; i++) {
+        if (list.length === 1) { list[i]._gap = 30; continue; }
+        const ahead = list[(i + 1) % list.length];
+        const dc = nd(list[i].dist), da = nd(ahead.dist);
+        const gap = da > dc ? da - dc : da + L - dc;
+        list[i]._gap = Math.max(0, gap - 2.15);
+      }
+    }
+
+    // هدف سرعت هر ماشین
+    for (const c of cars) {
+      if (c.state === 'crashed') { c._target = 0; continue; }
+      if (c.state !== null && c.state !== 'dispatch') continue; // خارج از ترافیک حلقه
+      let target = c.speed;
+      if (c._gap < 0.4) target = 0;
+      else target = Math.min(target, c._gap * 1.7);
+      if (c.state === 'dispatch') target = Math.min(target * 1.8, 4.0);
+      // عابر روی خط عابر → توقف کامل
+      if (this.crossers.length && c._p) {
+        for (const cr of this.crossers) {
+          if (cr.phase !== 'cross') continue;
+          // فقط وقتی عابر روی خودِ جاده است
+          if (cr.vert ? Math.abs(cr.z - cr.lz) > this.R / 2 + 0.55 : Math.abs(cr.x - cr.lx) > this.R / 2 + 0.55) continue;
+          const dx = cr.x - c._p.x, dz = cr.z - c._p.z;
+          const fwd = dx * c._p.hx + dz * c._p.hz;
+          const lat = Math.abs(dx * c._p.hz - dz * c._p.hx);
+          if (fwd > 0.1 && fwd < 3.4 + c.cur * 0.85 && lat < 1.7) { target = 0; break; }
+        }
+      }
+      // پلیس نزدیک محل تصادف می‌ایستد (پشت ماشین‌های تصادفی صف می‌کند)
+      if (c.state === 'dispatch' && this.accident && c._p) {
+        const d = Math.hypot(c._p.x - this.accident.x, c._p.z - this.accident.z);
+        if (d < 5.5) target = 0;
+      }
+      c._target = target;
+    }
+
+    // حرکت
+    for (const c of cars) {
+      const rate = c._target > c.cur ? 1.7 : 6.5;   // گاز نرم، ترمز تند
+      c.cur += (c._target - c.cur) * Math.min(1, dt * rate);
+      if (Math.abs(c._target - c.cur) < 0.015) c.cur = c._target;
+      const spin = (c.cur * dt) / Math.max(0.05, c.wheelR);
+
+      if (c.state === null || c.state === 'dispatch' || c.state === 'crashed') {
+        const before = c.dist;
+        c.dist += c.cur * dt;
+        const p = rectPoint(c.h, c.h, c.dist, c.dir, c.lane);
+        c._p = p;
+        c.obj.position.set(p.x, 0.07, p.z);
+        const ta = Math.atan2(p.hx, p.hz);
+        let d = ta - c.angle;
+        while (d > Math.PI) d -= Math.PI * 2;
+        while (d < -Math.PI) d += Math.PI * 2;
+        c.angle += d * Math.min(1, dt * 7);
+        c.obj.rotation.y = c.angle;
+        for (const w of c.wheels) w.rotation.x += spin;
+
+        // خروج از شهر: در گوشه‌ی حلقه‌ی بیرونی مستقیم برود و در مه گم شود
+        if (c.state === null && c.h === this._outerH && this._outsideCount < 2 && Math.random() < 0.35) {
+          const side = 2 * c.h;
+          const L = 8 * c.h;
+          const nb = ((before % L) + L) % L, na = ((c.dist % L) + L) % L;
+          if (Math.floor(nb / side) !== Math.floor(na / side)) {
+            const pb = rectPoint(c.h, c.h, before, c.dir, c.lane);
+            c.state = 'exiting';
+            this._outsideCount++;
+            c._ex = {
+              dx: pb.hx, dz: pb.hz,
+              x: pb.x + pb.hx * (c.dist - before),
+              z: pb.z + pb.hz * (c.dist - before),
+            };
+          }
+        }
+        // نرمال‌سازی مسافت داخل یک دور
+        {
+          const L = 8 * c.h;
+          if (c.dist >= L || c.dist < 0) c.dist = ((c.dist % L) + L) % L;
+        }
+      } else if (c.state === 'exiting') {
+        c.cur += (Math.min(c.speed * 1.35, 3.4) - c.cur) * Math.min(1, dt * 1.5);
+        c._ex.x += c._ex.dx * c.cur * dt;
+        c._ex.z += c._ex.dz * c.cur * dt;
+        c._p = { x: c._ex.x, z: c._ex.z, hx: c._ex.dx, hz: c._ex.dz };
+        c.obj.position.set(c._ex.x, 0.07, c._ex.z);
+        for (const w of c.wheels) w.rotation.x += spin;
+        if (Math.max(Math.abs(c._ex.x), Math.abs(c._ex.z)) > this._exitR) this._startEnter(c);
+      } else if (c.state === 'entering') {
+        c.cur += (Math.min(c.speed, 2.8) - c.cur) * Math.min(1, dt * 1.5);
+        const e = c._en;
+        e.x += e.dx * c.cur * dt;
+        e.z += e.dz * c.cur * dt;
+        c._p = { x: e.x, z: e.z, hx: e.dx, hz: e.dz };
+        c.obj.position.set(e.x, 0.07, e.z);
+        for (const w of c.wheels) w.rotation.x += spin;
+        const rem = (e.tx - e.x) * e.dx + (e.tz - e.z) * e.dz;
+        if (rem <= 0) {
+          c.state = null;
+          c._p = rectPoint(c.h, c.h, c.dist, c.dir, c.lane);
+          c.obj.position.set(c._p.x, 0.07, c._p.z);
+        }
+      }
+      // toPark/parked/away در _updateParking حرکت می‌کنند
+    }
+  }
+
+  // بعد از رفتن در مه، از سمت دیگری به شهر وارد می‌شود
+  _startEnter(c) {
+    const side = 2 * c.h;
+    const corners = [[-c.h, -c.h], [c.h, -c.h], [c.h, c.h], [-c.h, c.h]];
+    if (c.dir < 0) corners.reverse();
+    const k = Math.floor(Math.random() * 4);
+    const a = corners[k], b = corners[(k + 1) % 4];
+    const ux = (b[0] - a[0]) / side, uz = (b[1] - a[1]) / side;
+    const D = 36; // از دل مه
+    c._en = {
+      x: a[0] - uz * c.lane - ux * D,
+      z: a[1] + ux * c.lane - uz * D,
+      tx: a[0] - uz * c.lane,
+      tz: a[1] + ux * c.lane,
+      dx: ux, dz: uz,
+    };
+    c.dist = k * side;
+    c.angle = Math.atan2(ux, uz);
+    c.obj.rotation.y = c.angle;
+    c.cur = Math.min(c.speed, 2.6);
+    c.state = 'entering';
+    this._outsideCount = Math.max(0, this._outsideCount - 1);
+  }
+
+  // ---------- رویدادها: تصادف و پارک منزل ----------
+  _updateEvents(dt, t) {
+    if (!this.accident) {
+      this._accidentT -= dt;
+      if (this._accidentT <= 0) {
+        this._accidentT = 34 + Math.random() * 40;
+        this._startAccident();
+      }
+    } else {
+      this._updateAccident(dt, t);
+    }
+    if (!this.parkEvent) {
+      this._parkT -= dt;
+      if (this._parkT <= 0) {
+        this._parkT = 22 + Math.random() * 30;
+        this._startParking();
+      }
+    } else {
+      this._updateParking(dt, t);
+    }
+  }
+
+  _startAccident() {
+    const police = this.cars.find((c) => c.name === 'police' && c.state === null);
+    if (!police) return;
+    const ok = (c) => c.state === null && c !== police &&
+      !/kart|race|police|tractor|truck|firetruck|garbage|delivery|ambulance/.test(c.name);
+    // جفت ماشین روی حلقه‌ی پلیس (تصادف وسط شهر، جلوی چشم!)
+    const pool = this.cars.filter((c) => ok(c) && c.h === police.h && c.dir === police.dir);
+    if (pool.length < 1) return;
+    const a = pool[Math.floor(Math.random() * pool.length)];
+    const b = this.cars.find((c) => ok(c) && c !== a && c.h === a.h && c.dir === a.dir);
+    if (!b) return;
+    const pa = rectPoint(a.h, a.h, a.dist, a.dir, a.lane);
+    // ماشین دوم از پشت به او می‌رسد (تصادف دنباله‌ای)
+    const L = 8 * a.h;
+    b.dist = (((a.dist - 2.35) % L) + L) % L;
+    a.cur = 0; b.cur = 0; a._target = 0; b._target = 0;
+    a.state = 'crashed'; b.state = 'crashed';
+    // سرنشین‌ها پیاده می‌شوند و کنار جاده می‌ایستند
+    const people = [];
+    for (const car of [a, b]) {
+      const p = rectPoint(car.h, car.h, car.dist, car.dir, car.lane);
+      const px = p.x + p.hz * 2.15 + (Math.random() - 0.5) * 0.6;
+      const pz = p.z - p.hx * 2.15 + (Math.random() - 0.5) * 0.6;
+      const per = this._person();
+      per.g.position.set(px, 0.06, pz);
+      per.g.rotation.y = Math.atan2(p.x - px, p.z - pz);
+      this.group.add(per.g);
+      people.push({ ...per, x: px, z: pz });
+    }
+    // پلیس از نزدیک‌ترین نقطه‌ی مسیرش اعزام می‌شود
+    const dPol = this._distForPoint(police.h, police.dir, police.lane, pa.x, pa.z);
+    const Lp = 8 * police.h;
+    police.dist = (((dPol - 9) % Lp) + Lp) % Lp;
+    police.cur = 0;
+    police.state = 'dispatch';
+    if (police.lights) police.lights.bar.visible = true;
+    this.accident = { a, b, people, police, x: pa.x, z: pa.z, phase: 'wait', t: 0 };
+    if (this.ui?.toast) this.ui.toast('🚨 یه تصادف کوچولو شد؛ پلیس داره می‌رسه!');
+  }
+
+  _updateAccident(dt, t) {
+    const A = this.accident;
+    A.t += dt;
+    if (A.police.lights) {
+      const on = Math.sin(t * 16) > 0;
+      A.police.lights.red.visible = on;
+      A.police.lights.blue.visible = !on;
+    }
+    // سرنشین‌ها منتظر می‌ایستند
+    for (const p of A.people) {
+      p.g.position.y = 0.06 + Math.abs(Math.sin(t * 1.3 + p.z)) * 0.012;
+    }
+    if (A.phase === 'wait') {
+      const d = A.police._p ? Math.hypot(A.police._p.x - A.x, A.police._p.z - A.z) : 99;
+      if (d < 6.5 || A.t > 25) { A.phase = 'fixing'; A.t = 0; }
+    } else if (A.phase === 'fixing') {
+      if (A.t > 4.5) { A.phase = 'leave'; A.t = 0; }
+    } else if (A.phase === 'leave') {
+      // سرنشین‌ها برمی‌گردند و سوار ماشینشان می‌شوند
+      let all = true;
+      for (let i = 0; i < A.people.length; i++) {
+        const p = A.people[i];
+        const car = i === 0 ? A.a : A.b;
+        const cp = rectPoint(car.h, car.h, car.dist, car.dir, car.lane);
+        const tx = cp.x + cp.hz * 1.15, tz = cp.z - cp.hx * 1.15;
+        const d = Math.hypot(tx - p.x, tz - p.z);
+        if (d > 0.12) {
+          all = false;
+          const st = Math.min(1.05 * dt, d);
+          p.x += (tx - p.x) / d * st;
+          p.z += (tz - p.z) / d * st;
+          p.g.position.set(p.x, 0.06, p.z);
+          p.g.rotation.y = Math.atan2(tx - p.x, tz - p.z);
+          const swing = Math.sin(t * 9);
+          p.legL.rotation.x = swing * 0.5; p.legR.rotation.x = -swing * 0.5;
+          p.armL.rotation.x = -swing * 0.35; p.armR.rotation.x = swing * 0.35;
+        }
+      }
+      if (all && A.t > 3) {
+        for (const p of A.people) this.group.remove(p.g);
+        A.a.state = null; A.b.state = null;
+        A.a.cur = 0.35; A.b.cur = 0.35;
+        A.a._target = A.a.speed; A.b._target = A.b.speed;
+        A.police.state = null;
+        if (A.police.lights) { A.police.lights.bar.visible = false; A.police.lights.red.visible = true; A.police.lights.blue.visible = true; }
+        this.accident = null;
+      }
+    }
+  }
+
+  _startParking() {
+    if (!this._spotsReady) {
+      this._spotsReady = true;
+      this.parkingSpots = this.parkingSpots.filter((sp) =>
+        !this.parkedStatic.some((p) => Math.hypot(p.x - sp.x, p.z - sp.z) < 2.6));
+    }
+    if (!this.parkingSpots.length) return;
+    const car = this.cars.find((c) => c.state === null &&
+      /^(sedan|sedan-sports|suv|suv-luxury|van|hatchback-sports|taxi)$/.test(c.name));
+    if (!car) return;
+    const spot = this.parkingSpots[Math.floor(Math.random() * this.parkingSpots.length)];
+    const p = car._p || rectPoint(car.h, car.h, car.dist, car.dir, car.lane);
+    car.state = 'toPark';
+    car._target = 0;
+    car.cur = 0;
+    car._from = { x: p.x, z: p.z };
+    const dx = spot.x - p.x, dz = spot.z - p.z;
+    const sgn = Math.random() < 0.5 ? 1 : -1;
+    car._park = {
+      spot, prog: 0,
+      mx: p.x + dx * 0.5 - dz * 0.2 * sgn,
+      mz: p.z + dz * 0.5 + dx * 0.2 * sgn,
+    };
+    this.parkEvent = { car, spot, phase: 'drive', t: 0, driver: null, stay: 0 };
+  }
+
+  _updateParking(dt, t) {
+    const E = this.parkEvent;
+    const car = E.car, spot = E.spot;
+    E.t += dt;
+    const bz = (q, x0, z0, mx, mz, x1, z1) => {
+      const u = 1 - q;
+      return [u * u * x0 + 2 * u * q * mx + q * q * x1, u * u * z0 + 2 * u * q * mz + q * q * z1];
+    };
+    if (E.phase === 'drive' || E.phase === 'away') {
+      const from = E.phase === 'drive' ? car._from : { x: spot.x, z: spot.z };
+      const to = E.phase === 'drive' ? spot : car._from;
+      const pk = car._park;
+      pk.prog = Math.min(1, pk.prog + dt / 3.4);
+      const ease = pk.prog * pk.prog * (3 - 2 * pk.prog);
+      const [x, z] = bz(ease, from.x, from.z, pk.mx, pk.mz, to.x, to.z);
+      const [x2, z2] = bz(Math.min(1, ease + 0.06), from.x, from.z, pk.mx, pk.mz, to.x, to.z);
+      car.obj.position.set(x, 0.07, z);
+      const ta = Math.atan2(x2 - x, z2 - z);
+      let d = ta - car.angle;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      car.angle += d * Math.min(1, dt * 6);
+      car.obj.rotation.y = car.angle;
+      const spin = Math.hypot(x2 - x, z2 - z) / Math.max(0.05, car.wheelR);
+      for (const w of car.wheels) w.rotation.x += spin;
+      if (pk.prog >= 1) {
+        if (E.phase === 'drive') {
+          car.obj.rotation.y = car.angle = spot.rot;
+          car.state = 'parked';
+          E.phase = 'exit'; E.t = 0;
+          // راننده پیاده می‌شود
+          const per = this._person();
+          per.g.position.set(spot.x + 0.85, 0.06, spot.z);
+          this.group.add(per.g);
+          E.driver = { ...per, x: spot.x + 0.85, z: spot.z };
+        } else {
+          car.state = null;
+          car.cur = 0.3;
+          car._p = rectPoint(car.h, car.h, car.dist, car.dir, car.lane);
+          car.obj.position.set(car._p.x, 0.07, car._p.z);
+          this.parkEvent = null;
+        }
+      }
+    } else if (E.phase === 'exit' || E.phase === 'return') {
+      // راننده تا درِ خانه می‌رود / برمی‌گردد سر ماشین
+      const p = E.driver;
+      const going = E.phase === 'exit';
+      const tx = going ? spot.door.x : spot.x + 0.85;
+      const tz = going ? spot.door.z : spot.z;
+      const dist = Math.hypot(tx - p.x, tz - p.z);
+      if (dist > 0.12) {
+        const st = Math.min(1.0 * dt, dist);
+        p.x += (tx - p.x) / dist * st;
+        p.z += (tz - p.z) / dist * st;
+        p.g.position.set(p.x, 0.06, p.z);
+        p.g.rotation.y = Math.atan2(tx - p.x, tz - p.z);
+        const swing = Math.sin(t * 8.5);
+        p.legL.rotation.x = swing * 0.5; p.legR.rotation.x = -swing * 0.5;
+        p.armL.rotation.x = -swing * 0.35; p.armR.rotation.x = swing * 0.35;
+      } else if (going) {
+        p.g.visible = false;          // وارد خانه می‌شود
+        E.phase = 'inside'; E.t = 0; E.stay = 45 + Math.random() * 100;
+      } else {
+        this.group.remove(p.g);       // سوار می‌شود و می‌رود
+        car._park.prog = 0;
+        E.phase = 'away'; E.t = 0;
+      }
+    } else if (E.phase === 'inside') {
+      if (E.t > E.stay) {
+        E.driver.g.visible = true;
+        E.driver.x = spot.door.x;
+        E.driver.z = spot.door.z;
+        E.phase = 'return';
+      }
+    }
   }
 
   // ---------- حلقه‌ی بازی ----------
@@ -1128,19 +1635,50 @@ export class City {
     this.time += dt;
     const t = this.time;
 
-    for (const car of this.cars) {
-      car.dist += car.speed * dt;
-      const p = rectPoint(car.h, car.h, car.dist, car.dir, car.lane);
-      car.obj.position.set(p.x, 0.07, p.z);
-      const target = Math.atan2(p.hx, p.hz);
-      let d = target - car.angle;
-      while (d > Math.PI) d -= Math.PI * 2;
-      while (d < -Math.PI) d += Math.PI * 2;
-      car.angle += d * Math.min(1, dt * 7);
-      car.obj.rotation.y = car.angle;
-      if (car.wheels.length) {
-        const spin = (car.speed * dt) / Math.max(0.05, car.wheelR);
-        for (const w of car.wheels) w.rotation.x += spin;
+    // ترافیک (فاصله‌گیری/توقف برای عابر/خروج از شهر) + رویدادها (تصادف/پارک)
+    this._updateTraffic(dt, t);
+    this._updateEvents(dt, t);
+
+    // عابرهای خط عابر
+    for (const cr of this.crossers) {
+      const len = Math.hypot(cr.bx - cr.ax, cr.bz - cr.az) || 1;
+      if (cr.phase === 'wait' || cr.phase === 'pause') {
+        cr.t -= dt;
+        cr.g.rotation.y = cr.baseRy + Math.sin(t * 0.7 + cr.ax) * 0.09;
+        cr.g.position.y = 0.06 + Math.abs(Math.sin(t * 1.4 + cr.az)) * 0.012;
+        if (cr.t <= 0) { cr.phase = 'cross'; cr.prog = 0; }
+      } else {
+        // قبل از پا گذاشتن روی جاده، اگر ماشین نزدیک می‌آید صبر می‌کند
+        let hold = false;
+        if (cr.prog < 0.3) {
+          for (const c of this.cars) {
+            if (!c._p) continue;
+            if (c.state !== null && c.state !== 'dispatch' && c.state !== 'exiting' && c.state !== 'entering') continue;
+            const d = Math.hypot(c._p.x - cr.x, c._p.z - cr.z);
+            if (d < 2.2 || (d < 6.2 && c.cur > 0.25)) { hold = true; break; }
+          }
+        }
+        if (!hold) cr.prog = Math.min(1, cr.prog + (cr.speed * dt) / len);
+        const q = cr.back ? 1 - cr.prog : cr.prog;
+        const x = cr.ax + (cr.bx - cr.ax) * q;
+        const z = cr.az + (cr.bz - cr.az) * q;
+        if (!hold) {
+          const fx = (cr.bx - cr.ax) * (cr.back ? -1 : 1);
+          const fz = (cr.bz - cr.az) * (cr.back ? -1 : 1);
+          const swing = Math.sin(t * 8.5);
+          cr.g.position.set(x, 0.06 + Math.abs(Math.cos(t * 8.5)) * 0.035, z);
+          cr.g.rotation.y = Math.atan2(fx, fz);
+          cr.legL.rotation.x = swing * 0.55;
+          cr.legR.rotation.x = -swing * 0.55;
+          cr.armL.rotation.x = -swing * 0.42;
+          cr.armR.rotation.x = swing * 0.42;
+        }
+        cr.x = x; cr.z = z;
+        if (cr.prog >= 1) {
+          cr.back = !cr.back;
+          cr.phase = cr.back ? 'pause' : 'wait';
+          cr.t = 1.5 + Math.random() * 5;
+        }
       }
     }
 
