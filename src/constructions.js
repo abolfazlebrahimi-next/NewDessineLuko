@@ -4,9 +4,8 @@
 // کارت سازه را از سینی روی زمین بینداز تا ساخته شود؛
 // کلیک روی حصار/دیوار = چرخش ۹۰ درجه، دوبار کلیک سریع = برداشتن (برگشت به کارت‌ها).
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { sharedManager } from './loader.js';
-import { STRUCTURES, MAP_BOUNDS, LAYOUT, ITEMS } from './config.js';
+import { makeGLTFLoader } from './loader.js';
+import { STRUCTURES, MAP_BOUNDS, LAYOUT, ITEMS, assetUrl } from './config.js';
 import {
   state, addStructure, removeStructure, getStructure,
   takeItem, addItem, cellPosition, save,
@@ -19,8 +18,8 @@ export class Constructions {
   constructor(world, ui) {
     this.world = world;
     this.ui = ui;
-    this.loader = new GLTFLoader(sharedManager);
-    this.templates = {};       // kindId -> scene
+    this.loader = makeGLTFLoader(); // با دیکدر Meshopt — مدل‌های فشرده هم لود می‌شوند
+    this.templates = {};       // kindId -> [scene, ...] (مدل‌های پکیج؛ خانه چند مدل دارد)
     this.modelsReady = false;
     this.modelsFailed = false;
     this.visuals = new Map();  // structureId -> { group }
@@ -395,16 +394,23 @@ export class Constructions {
       const finish = (v) => { if (!done) { done = true; resolve(v); } };
       const timer = setTimeout(() => finish(null), 7000);
       try {
-        this.loader.load(encodeURI(STRUCTURES.basePath + file),
+        this.loader.load(encodeURI(assetUrl(STRUCTURES.basePath + file)),
           (g) => { clearTimeout(timer); finish(g.scene); },
           undefined,
           () => { clearTimeout(timer); finish(null); });
       } catch (e) { clearTimeout(timer); finish(null); }
     });
     try {
+      // هر «نوع» سازه می‌تواند یک مدل یا چند مدل داشته باشد (خانه چند مدل دارد)
       const ids = Object.keys(STRUCTURES.kinds);
-      const scenes = await Promise.all(ids.map(id => loadOne(STRUCTURES.kinds[id].model)));
-      ids.forEach((id, i) => { if (scenes[i]) this.templates[id] = scenes[i]; });
+      const filesOf = (spec) => (Array.isArray(spec.model) ? spec.model : [spec.model]);
+      const allFiles = [...new Set(ids.flatMap((id) => filesOf(STRUCTURES.kinds[id])))];
+      const scenes = await Promise.all(allFiles.map((f) => loadOne(f)));
+      const byFile = new Map(allFiles.map((f, i) => [f, scenes[i]]));
+      for (const id of ids) {
+        const list = filesOf(STRUCTURES.kinds[id]).map((f) => byFile.get(f)).filter(Boolean);
+        if (list.length) this.templates[id] = list;
+      }
     } catch (e) { /* fallback */ }
 
     if (Object.keys(this.templates).length) {
@@ -424,7 +430,12 @@ export class Constructions {
     box.getSize(size);
     box.getCenter(center);
     if (size.y <= 0.001) return null;
-    const s = spec.targetH ? spec.targetH / size.y : spec.targetW / Math.max(size.x, size.z);
+    // اگر هم سقف پهنا و هم سقف ارتفاع داده شده، کوچک‌ترین مقیاس برداشته می‌شود
+    const s = Math.min(
+      spec.targetH ? spec.targetH / size.y : Infinity,
+      spec.targetW ? spec.targetW / Math.max(size.x, size.z) : Infinity,
+    );
+    if (!isFinite(s) || s <= 0) return null;
     inner.scale.setScalar(s);
     inner.position.set(-center.x * s, -box.min.y * s, -center.z * s);
     inner.traverse((o) => { if (o.isMesh) o.renderOrder = 1000 + renderZ * 10 + 1; });
@@ -436,8 +447,12 @@ export class Constructions {
   attachModel(st) {
     const v = this.visuals.get(st.id);
     if (!v || v.group) return;
-    const tpl = this.templates[st.kind];
-    if (!tpl) { this.attachFallback(st); return; }
+    const pool = this.templates[st.kind];
+    if (!pool || !pool.length) { this.attachFallback(st); return; }
+    // انتخاب پایدار مدل از روی آیدی سازه — با بستن و بازکردن بازی عوض نمی‌شود
+    let h = 0;
+    for (const ch of st.id) h = ((h * 31) + ch.charCodeAt(0)) >>> 0;
+    const tpl = pool[h % pool.length];
     const spec = STRUCTURES.kinds[st.kind];
     const c = this.centerOf(st);
     const group = new THREE.Group();

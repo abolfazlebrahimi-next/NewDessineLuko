@@ -242,14 +242,14 @@ export const ITEMS = {
     desc: 'یک تکه دیوار بلند و محکم. دیوارهای کنار هم را می‌شود با هم درگ‌ودراپ کرد؛ کلیک = چرخش، دوبار کلیک سریع = برداشتن.',
   },
   tent: {
-    id: 'tent', name: 'چادر', icon: null, svg: 'tent',
+    id: 'tent', name: 'کلبه', icon: null, svg: 'hut',
     price: PRICES.build.tent, currency: 'coins', category: 'build', place: 'ground', ghost: 2.3,
-    desc: 'یک چادر قشنگ برای تزیین مزرعه یا شهر (۲×۲ خانه). با درگ جابجا می‌شود.',
+    desc: 'کلبه‌ای کوچک از پکیج خانه‌های شهر (۲×۲ خانه). با درگ جابجا می‌شود؛ کلیک = چرخش، دوبار کلیک سریع = برداشتن.',
   },
   house: {
-    id: 'house', name: 'خانه‌ی چوبی', icon: null, svg: 'house',
+    id: 'house', name: 'خانه‌ی شهری', icon: null, svg: 'house',
     price: PRICES.build.house, currency: 'coins', category: 'build', place: 'ground', ghost: 3.3,
-    desc: 'یک خانه‌ی چوبی با سقف، برای ساختن محله‌ی خودت (۳×۳ خانه). با درگ جابجا می‌شود.',
+    desc: 'خانه‌ی واقعی از پکیج شهر — همان مدل خانه‌های محله‌ها؛ محله‌ی خودت را بساز (۳×۳ خانه). با درگ جابجا می‌شود؛ کلیک = چرخش، دوبار کلیک سریع = برداشتن.',
   },
 };
 
@@ -268,14 +268,23 @@ export const CATEGORIES = [
 ];
 
 // ---------- سازه‌های قابل ساختن (مدل‌ها در public/models/build) ----------
+// خانه‌ها، کلبه و حصار از پکیج Kenney City Kit Suburban 2.0 (پوشه‌ی nn) هستند؛
+// «خانه» چند مدل دارد و هر سازه‌ی ساخته‌شده به‌صورت پایدار (بر اساس آیدی خودش)
+// یکی از آن‌ها را می‌گیرد تا محله‌ای که می‌سازی متنوع بیفتد.
 export const STRUCTURES = {
   basePath: 'models/build/',
   cell: 1.04, // اندازه‌ی خانه‌ی شبکه‌ی ساخت — سازه‌ها کامل به هم می‌چسبند
   kinds: {
-    fence: { model: 'fence.glb', cells: 1, targetH: 0.52, rotatable: true, pieces: 2 },
+    fence: { model: 'fence.glb', cells: 1, targetW: 1.04, rotatable: true, pieces: 1 },
     wall: { model: 'metal-panel.glb', cells: 1, targetW: 1.04, rotatable: true, pieces: 1 },
-    tent: { model: 'tent.glb', cells: 2, targetW: 1.55, rotatable: false, pieces: 1 },
-    house: { model: 'structure-roof.glb', cells: 3, targetW: 2.6, rotatable: false, pieces: 1 },
+    tent: { model: 'tent.glb', cells: 2, targetW: 1.5, targetH: 1.3, rotatable: true, pieces: 1 },
+    house: {
+      model: [
+        'building-type-a.glb', 'building-type-b.glb', 'building-type-d.glb', 'building-type-e.glb',
+        'building-type-n.glb', 'building-type-t.glb', 'building-type-u.glb',
+      ],
+      cells: 3, targetW: 2.6, targetH: 2.2, rotatable: true, pieces: 1,
+    },
   },
 };
 

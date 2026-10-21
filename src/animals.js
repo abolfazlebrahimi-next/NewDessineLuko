@@ -3,10 +3,9 @@
 // اگر مدل‌های GLB در public/models/animals باشند از آن‌ها استفاده می‌شود
 // (cow.glb و...)؛ وگرنه حیوان مکعبی با کد ساخته می‌شود — هم‌سبک آدمک‌ها.
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { sharedManager } from './loader.js';
+import { makeGLTFLoader } from './loader.js';
 import { clone as skeletonClone } from 'three/examples/jsm/utils/SkeletonUtils.js';
-import { ANIMALS, LAYOUT } from './config.js';
+import { ANIMALS, LAYOUT, assetUrl } from './config.js';
 
 const mat = (c) => new THREE.MeshLambertMaterial({ color: c });
 function box(parent, w, h, d, c, x, y, z) {
@@ -21,7 +20,7 @@ export class Animals {
     this.world = world;
     this.group = new THREE.Group();
     this.world.scene.add(this.group);
-    this.loader = new GLTFLoader(sharedManager);
+    this.loader = makeGLTFLoader(); // با دیکدر Meshopt — مدل‌های فشرده هم لود می‌شوند
     this.animals = [];
     this.ready = false;
   }
@@ -32,7 +31,7 @@ export class Animals {
       const finish = (v) => { if (!done) { done = true; resolve(v); } };
       const timer = setTimeout(() => finish(null), 6000);
       try {
-        this.loader.load(encodeURI(ANIMALS.basePath + file),
+        this.loader.load(encodeURI(assetUrl(ANIMALS.basePath + file)),
           (g) => { clearTimeout(timer); finish({ scene: g.scene, animations: g.animations }); },
           undefined,
           () => { clearTimeout(timer); finish(null); });

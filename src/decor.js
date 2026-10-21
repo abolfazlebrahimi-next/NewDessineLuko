@@ -3,9 +3,8 @@
 // تا حس جنگل واقعی بدهد. برای کارایی، درخت‌ها با InstancedMesh کشیده می‌شوند
 // و بر اساس نوار عمق (z) گروه‌بندی شده‌اند تا ترتیب نمایش با بقیه درست بماند.
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { sharedManager } from './loader.js';
-import { OBSTACLES, STRUCTURES, LAYOUT, FARM_CENTER } from './config.js';
+import { makeGLTFLoader } from './loader.js';
+import { OBSTACLES, STRUCTURES, LAYOUT, FARM_CENTER, assetUrl } from './config.js';
 import { state, markDecorRemoved } from './state.js';
 
 function mulberry32(seed) {
@@ -42,7 +41,7 @@ const PROP_SPECS = [
 export class Decor {
   constructor(world) {
     this.world = world;
-    this.loader = new GLTFLoader(sharedManager);
+    this.loader = makeGLTFLoader(); // با دیکدر Meshopt — مدل‌های فشرده هم لود می‌شوند
     this.group = new THREE.Group();
     this.world.scene.add(this.group);
     this.ready = false;
@@ -57,7 +56,7 @@ export class Decor {
       const finish = (v) => { if (!done) { done = true; resolve(v); } };
       const timer = setTimeout(() => finish(null), 8000);
       try {
-        this.loader.load(encodeURI(path + file),
+        this.loader.load(encodeURI(assetUrl(path + file)),
           (g) => { clearTimeout(timer); finish(g.scene); },
           undefined,
           () => { clearTimeout(timer); finish(null); });
@@ -321,20 +320,25 @@ export class Decor {
   _buildPenFence(fenceTpl) {
     const pen = LAYOUT.animalPen;
     const group = new THREE.Group();
-    const segLen = 0.52;
     const gapMin = 13.2, gapMax = 14.4; // دروازه‌ی آغل در ضلع جنوبی
+    const H = 0.52;                     // ارتفاع هدف نرده‌ی آغل
+
+    // اندازه‌ی الگوی نرده یک بار حساب می‌شود؛ طول هر قطعه از نسبت پهنا/ارتفاع
+    // خود مدل می‌آید تا تکه‌های نرده‌ی پکیج Kenney دقیق کنار هم بنشینند
+    let tplBox = null, tplSize = null, tplCenter = null, segLen = 0.52;
+    if (fenceTpl) {
+      tplBox = new THREE.Box3().setFromObject(fenceTpl);
+      tplSize = tplBox.getSize(new THREE.Vector3());
+      tplCenter = tplBox.getCenter(new THREE.Vector3());
+      if (tplSize.y > 0.001) segLen = Math.max(0.3, tplSize.x * (H / tplSize.y));
+    }
 
     const addSeg = (x, z, rotY) => {
-      if (fenceTpl) {
+      if (fenceTpl && tplSize && tplSize.y > 0.001) {
         const inner = fenceTpl.clone(true);
-        const box = new THREE.Box3().setFromObject(inner);
-        const size = new THREE.Vector3();
-        const center = new THREE.Vector3();
-        box.getSize(size);
-        box.getCenter(center);
-        const s = 0.52 / Math.max(0.01, size.y);
+        const s = H / tplSize.y;
         inner.scale.setScalar(s);
-        inner.position.set(-center.x * s, -box.min.y * s, -center.z * s);
+        inner.position.set(-tplCenter.x * s, -tplBox.min.y * s, -tplCenter.z * s);
         inner.traverse((o) => { if (o.isMesh) o.renderOrder = 1000 + z * 10 + 1; });
         const g = new THREE.Group();
         g.add(inner);

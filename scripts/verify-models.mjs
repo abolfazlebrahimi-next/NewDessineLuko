@@ -64,7 +64,7 @@ function walk(dir, out = []) {
   return out;
 }
 const map = {};
-for (const dir of ['public/models/city', 'public/models/cars', 'public/models/suburban', 'public/models/commercial', 'public/models/nature']) {
+for (const dir of ['public/models/city', 'public/models/cars', 'public/models/suburban', 'public/models/commercial', 'public/models/nature', 'public/models/build']) {
   for (const f of walk(dir)) {
     const rel = relative('public', f).split('\\').join('/');
     const mime = f.endsWith('.glb') ? 'model/gltf-binary' : f.endsWith('.png') ? 'image/png' : null;

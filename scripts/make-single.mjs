@@ -63,6 +63,7 @@ const wanted = (rel) =>
   rel.startsWith('models/suburban/') ||
   rel.startsWith('models/nature/') ||
   rel.startsWith('models/commercial/') ||
+  rel.startsWith('models/build/') ||
   WANTED_ASSETS.has(rel) ||
   /^assets\/city-[^/]+\.(png|webp)$/.test(rel);
 

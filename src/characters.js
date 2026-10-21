@@ -8,10 +8,9 @@
 // اگر مدل character-*.glb در public/models/characters باشد از آن استفاده می‌شود،
 // وگرنه آدمک مکعبی با کد ساخته می‌شود.
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { sharedManager } from './loader.js';
+import { makeGLTFLoader } from './loader.js';
 import { clone as skeletonClone } from 'three/examples/jsm/utils/SkeletonUtils.js';
-import { CHARACTERS, LAYOUT, CHAT_DIALOGUES, CUSTOMER_LINES, STRUCTURES } from './config.js';
+import { CHARACTERS, LAYOUT, CHAT_DIALOGUES, CUSTOMER_LINES, STRUCTURES, assetUrl } from './config.js';
 import { state, getBuildingPos, cellPosition } from './state.js';
 
 // مبدا شبکه‌ی سازه‌ها (مثل constructions.js) برای محاسبه‌ی برخورد دیوار/حصار
@@ -42,7 +41,7 @@ export class Characters {
     this.ui = ui;
     this.group = new THREE.Group();
     this.world.scene.add(this.group);
-    this.loader = new GLTFLoader(sharedManager);
+    this.loader = makeGLTFLoader(); // با دیکدر Meshopt — مدل‌های فشرده هم لود می‌شوند
     this.people = [];
     this.templates = [];      // [{ scene, animations }]
     this.tplCursor = 0;
@@ -61,7 +60,7 @@ export class Characters {
       const timer = setTimeout(() => finish(null), 6000);
       try {
         this.loader.load(
-          encodeURI(`${CHARACTERS.modelPath}character-${v}.glb`),
+          encodeURI(assetUrl(`${CHARACTERS.modelPath}character-${v}.glb`)),
           (gltf) => { clearTimeout(timer); finish({ scene: gltf.scene, animations: gltf.animations }); },
           undefined,
           () => { clearTimeout(timer); finish(null); },

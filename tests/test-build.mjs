@@ -1,6 +1,6 @@
 // تست دارایی‌های شهر: مدل‌های Kenney سر جایشان هستند + ریاضی مسیر مستطیلی ماشین‌ها/آدمک‌ها
 import { existsSync, statSync, readFileSync } from 'node:fs';
-import { CITY, LAYOUT } from '../src/config.js';
+import { CITY, LAYOUT, STRUCTURES } from '../src/config.js';
 import { rectPoint } from '../src/city.js';
 
 let failed = 0;
@@ -32,6 +32,17 @@ check('وسایل حیاط (ماشین‌رو/مسیر/نرده/گلدان) هس
 check('درخت‌های پکیج Survival Kit (سبز و پاییزی) هست',
   CITY.trees.every(n => isGLB(`public/models/nature/${n}.glb`)) &&
   ['rock-a', 'rock-b', 'rock-c', 'grass', 'grass-large'].every(n => isGLB(`public/models/nature/${n}.glb`)));
+check('مدل‌های سازه‌های ساخت‌وساز (پکیج Suburban 2.0 / nn) هست و فشرده‌اند', (() => {
+  const files = [
+    `public/models/build/${STRUCTURES.kinds.fence.model}`,
+    `public/models/build/${STRUCTURES.kinds.tent.model}`,
+    ...STRUCTURES.kinds.house.model.map((n) => `public/models/build/${n}`),
+  ];
+  return files.every((f) =>
+    isGLB(f) && readFileSync(f).toString('latin1', 0, 4000).includes('EXT_meshopt_compression'));
+})());
+check('بافت colormap مدل‌های ساخت‌وساز هست',
+  existsSync('public/models/build/Textures/colormap.png'));
 check('مدل‌ها فشرده‌اند (Meshopt) تا سریع لود شوند', (() => {
   const files = ['public/models/city/building-a.glb', 'public/models/cars/sedan.glb', 'public/models/suburban/building-type-a.glb', 'public/models/commercial/building-skyscraper-a.glb'];
   return files.every(f => readFileSync(f).toString('latin1', 0, 4000).includes('EXT_meshopt_compression') && statSync(f).size < 80000);

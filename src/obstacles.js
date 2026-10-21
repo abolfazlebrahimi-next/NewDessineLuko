@@ -4,9 +4,8 @@
 // مدل‌های سه‌بعدی از پکیج Kenney Survival Kit در public/models/nature خوانده می‌شوند؛
 // اگر بارگذاری نشدند، خودکار از تصاویر دوبعدی استفاده می‌شود.
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { sharedManager } from './loader.js';
-import { OBSTACLES, TIMING, REWARDS, LAYOUT } from './config.js';
+import { makeGLTFLoader } from './loader.js';
+import { OBSTACLES, TIMING, REWARDS, LAYOUT, assetUrl } from './config.js';
 import {
   state, addObstacle, removeObstacle, makeWildObstacle, cellPosition,
   addDew, addXp, spend, canAfford, save,
@@ -28,7 +27,7 @@ export class Obstacles {
     this.selected = null;       // { id, until }
     this.hovered = null;
     this.regrowTimer = 0;
-    this.loader = new GLTFLoader(sharedManager);
+    this.loader = makeGLTFLoader(); // با دیکدر Meshopt — مدل‌های فشرده هم لود می‌شوند
     this._transparentTex = null;
     this._rockTex = null;
   }
@@ -80,7 +79,7 @@ export class Obstacles {
       const timer = setTimeout(() => finish(null), 7000);
       try {
         this.loader.load(
-          encodeURI(OBSTACLES.basePath + file),
+          encodeURI(assetUrl(OBSTACLES.basePath + file)),
           (gltf) => { clearTimeout(timer); finish(gltf.scene); },
           undefined,
           () => { clearTimeout(timer); finish(null); },

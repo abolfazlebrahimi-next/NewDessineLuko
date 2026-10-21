@@ -52,5 +52,6 @@ node scripts/preview-render.mjs                          # پیش‌نمایش C
 - `src/state.js` — ذخیره‌ی بازی و اقتصاد (سکه/شبنم محدود)
 - `src/loader.js` — لودر GLB مشترک با دیکودر Meshopt و نقشه‌ی دارایی بیلد تک‌فایل
 - `public/models/city` (Industrial)، `public/models/commercial` (Commercial)، `public/models/suburban` (Suburban)، `public/models/cars` (Car Kit)، `public/models/nature` (Survival Kit) — مدل‌های Kenney (لایسنس CC0، فایل `Kenney-License.txt`)
+- `public/models/build` — مدل‌های سازه‌های ساخت‌وساز (خانه/کلبه/حصار) از **Kenney City Kit Suburban 2.0** (پکیج `public/nn`): «خانه‌ی شهری» هفت مدل مختلف دارد و هر سازه به‌صورت پایدار یکی را می‌گیرد؛ حصارِ آغل حیوانات هم از همین پکیج است.
 - `public/assets/city-*.webp` — تصاویر ساختمان‌های اصلی (اصل PNG در `assets-src/images`)
 - `assets-src/nature-pack-original` — پکیج اصلی Survival Kit (OBJ/FBX)؛ GLB درخت‌ها از همین ساخته شده
