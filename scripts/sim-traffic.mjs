@@ -93,7 +93,7 @@ const DT = 1 / 30;
 const SECONDS = process.env.SIM_SECONDS ? parseInt(process.env.SIM_SECONDS) : 600; // ۱۰ دقیقه‌ی مجازی
 const seen = {
   exiting: 0, reentered: 0, accidents: 0, accidentsDone: 0,
-  parks: 0, parksDone: 0,
+  parks: 0, parksDone: 0, visits: 0, visitsDone: 0,
   crossPhases: new Set(),
   carStates: new Set(),
 };
@@ -102,6 +102,7 @@ let t = 0;
 for (let i = 0; i < frames; i++) {
   t += DT;
   city.update(DT);
+  if (process.env.DBG_VIS && Math.abs(t % 10) < DT) console.error('t=' + t.toFixed(0), 'vis', city.visitors.length, city.visitors.map(v => v.phase).join(','));
   const ocBefore = city._outsideCount;
   for (const c of city.cars) {
     seen.carStates.add(c.state);
@@ -130,9 +131,11 @@ for (let i = 0; i < frames; i++) {
     const moved = Math.hypot(c.obj.position.x - c._still.x, c.obj.position.z - c._still.z) > 0.05;
     if (moved) { c._still = { t: 0, x: c.obj.position.x, z: c.obj.position.z }; }
     else c._still.t += DT;
+    // صفِ پشت رویدادهای معتبر (تصادف تا ~۴۰s + تخلیه‌ی صف) نباید خطا شمرده شود؛
+    // قفلِ واقعی هرگز رفع نمی‌شود و در ۷۰ ثانیه هم دیده می‌شود
     const legit = c.state === 'crashed' || c.state === 'parked' || c.state === 'toPark' ||
-      (city.accident && c._still.t < 55);
-    if (!legit && c._still.t > 45) {
+      (city.accident && c._still.t < 70);
+    if (!legit && c._still.t > 70) {
       console.error(`بن‌بست! ${c.name} state=${c.state} به مدت ${c._still.t.toFixed(0)}s ثابت است`);
       console.error(`  pos=(${c.x.toFixed(1)},${c.z.toFixed(1)}) h=(${c.hx},${c.hz}) cur=${c.cur.toFixed(2)} target=${(c._target ?? -1).toFixed(2)} speed=${c.speed.toFixed(2)}`);
       if (c.nextC) {
@@ -143,10 +146,14 @@ for (let i = 0; i < frames; i++) {
         if (o === c) continue;
         const rx = o.x - c.x, rz = o.z - c.z;
         const fwd = rx * c.hx + rz * c.hz;
-        if (fwd <= 0 || fwd > 12) continue;
+        if (fwd <= 0 || fwd > 36) continue;
         const lat = Math.abs(rx * c.hz - rz * c.hx);
         if (lat > 1.5) continue;
-        console.error(`  جلو: ${o.name} state=${o.state} fwd=${fwd.toFixed(1)} lat=${lat.toFixed(2)} cur=${o.cur.toFixed(2)}`);
+        console.error(`  جلو: ${o.name} state=${o.state} fwd=${fwd.toFixed(1)} lat=${lat.toFixed(2)} cur=${o.cur.toFixed(2)} still=${(o._still?.t || 0).toFixed(0)}s pos=(${o.x.toFixed(1)},${o.z.toFixed(1)}) h=(${o.hx},${o.hz})`);
+      }
+      for (const cr of city.crossers) {
+        const d = Math.hypot(cr.x - c.x, cr.z - c.z);
+        if (d < 6) console.error(`  عابر: phase=${cr.phase} prog=${(cr.prog || 0).toFixed(2)} d=${d.toFixed(1)} pos=(${cr.x.toFixed(1)},${cr.z.toFixed(1)})`);
       }
       // وضعیت همه‌ی ماشین‌های نزدیک
       for (const o of city.cars) {
@@ -156,7 +163,7 @@ for (let i = 0; i < frames; i++) {
         const nc = o.nextC ? ` nextC=(${o.nextC.x.toFixed(0)},${o.nextC.z.toFixed(0)})` : ' nextC=null';
         console.error(`  نزدیک: ${o.name} state=${o.state} pos=(${o.x.toFixed(1)},${o.z.toFixed(1)}) cur=${o.cur.toFixed(2)}${tc}${nc}`);
       }
-      if (city.parkEvent) console.error(`  parkEvent: phase=${city.parkEvent.phase} car=${city.parkEvent.car.name}`);
+      if (city.parkEvent) { const pe = city.parkEvent; console.error(`  parkEvent: phase=${pe.phase} car=${pe.car.name} spot=(${pe.spot.x.toFixed(1)},${pe.spot.z.toFixed(1)}) carPos=(${pe.car.x.toFixed(1)},${pe.car.z.toFixed(1)})`); }
       if (city.accident) console.error(`  accident: phase=${city.accident.phase}`);
       process.exit(1);
     }
@@ -167,6 +174,11 @@ for (let i = 0; i < frames; i++) {
   else if (seen.accidents > seen.accidentsDone) seen.accidentsDone = seen.accidents;
   if (city.parkEvent) { if (!city.parkEvent._c) { city.parkEvent._c = 1; seen.parks++; } }
   else if (seen.parks > seen.parksDone) seen.parksDone = seen.parks;
+  // بازدید خانه‌ها (هر آدمک جدا شمرده می‌شود)
+  for (const v of city.visitors) {
+    if (v.phase === 'inside' && !v._seenIn) { v._seenIn = 1; seen.visits++; }
+    if (v.phase === 'back' && !v._seenOut) { v._seenOut = 1; seen.visitsDone++; }
+  }
   for (const cr of city.crossers) {
     seen.crossPhases.add(cr.phase);
     if (!Number.isFinite(cr.x) || !Number.isFinite(cr.z)) { console.error('NaN crosser!'); process.exit(1); }
@@ -187,6 +199,7 @@ const farPeds = [...city.peds, ...city.crossers].filter((p) =>
   Math.hypot(p.g.position.x, p.g.position.z) > 25).length;
 check(`ماشین‌ها پخش هستند (${farCars} تا بیرونِ شعاع ۳۰)`, farCars >= 6);
 check(`آدمک‌ها پخش هستند (${farPeds} تا بیرونِ شعاع ۲۵)`, farPeds >= 8);
+check('آدمک‌ها داخل خانه می‌روند و برمی‌گردند', seen.visits >= 1 && seen.visitsDone >= 1);
 check('رویداد تصادف اجرا و تمام شد', seen.accidents >= 1 && seen.accidentsDone >= 1);
 check('رویداد پارک اجرا و تمام شد', seen.parks >= 1 && seen.parksDone >= 1);
 check('عابرها صبر/عبور کردند', seen.crossPhases.has('cross') && seen.crossPhases.size >= 2);

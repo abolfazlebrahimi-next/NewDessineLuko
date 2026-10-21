@@ -32,8 +32,9 @@ export class World {
     this.camera.lookAt(CAM_TARGET);
 
     // مه‌ی ملایم هم‌رنگ چمن: افق و لبه‌ی دور شهر در سبزی محو می‌شود تا
-    // نقشه «بی‌پایان» به نظر برسد و پایان جاده‌ها معلوم نشود
-    this.scene.fog = new THREE.Fog(0x7ec850, 30, 62);
+    // نقشه «بی‌پایان» به نظر برسد — بازه ملایم‌تر تا ساختمان‌ها موقع اسکرول
+    // نصفه یا کامل محو نشوند (اسپریت ساختمان‌ها اصلاً مه نمی‌گیرند)
+    this.scene.fog = new THREE.Fog(0x7ec850, 45, 100);
 
     this.loader = new THREE.TextureLoader(sharedManager);
     this.texCache = new Map();
@@ -176,6 +177,7 @@ export class World {
     const mat = new THREE.SpriteMaterial({
       map: tex, transparent: true, depthTest, depthWrite: false,
       alphaTest: 0.02,
+      fog: false,   // ساختمان‌های اصلی موقع پن/اسکرول محو نمی‌شوند
     });
     const sp = new THREE.Sprite(mat);
     const aspect = tex.image && tex.image.width ? tex.image.width / tex.image.height : 1.5;
@@ -201,6 +203,7 @@ export class World {
     // سایه‌ی تماس: دقیقاً زیر کفِ ساختمان (نه جلوی آن) تا روی زمین «بنشیند»
     const sh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({
       map: this.shadowTex, transparent: true, depthWrite: false, depthTest: false,
+      fog: false,   // سایه‌ی ساختمان هم مثل خودش مه نمی‌گیرد
       opacity: shadow && shadow.opacity != null ? shadow.opacity : 1,
     }));
     sh.rotation.x = -Math.PI / 2;
