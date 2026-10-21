@@ -25,6 +25,15 @@ function resolveFromMap(url) {
 export const sharedManager = new THREE.LoadingManager();
 sharedManager.setURLModifier(resolveFromMap);
 
+// درصد پیشرفت بارگذاری روی صفحه‌ی لودینگ — برای شبکه‌های کند
+sharedManager.onProgress = (url, loaded, total) => {
+  if (typeof document === 'undefined' || (globalThis && globalThis.__bootError)) return;
+  const el = document.querySelector('#loading .loading-inner div');
+  if (!el || !total) return;
+  const pct = Math.min(99, Math.round((loaded / total) * 100));
+  el.textContent = 'در حال ساخت شهر لوکو… ' + pct + '٪';
+};
+
 // لودر GLB با پشتیبانی از مدل‌های فشرده (Meshopt) — همه‌ی مدل‌های public/models
 // با scripts/optimize-models.mjs فشرده شده‌اند تا شهر چند برابر سریع‌تر لود شود.
 export function makeGLTFLoader() {
