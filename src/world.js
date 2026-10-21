@@ -482,11 +482,13 @@ export class World {
       const base = sp.userData.baseScale;
       if (!base) continue;
       if (sp.userData.hovering) {
-        // بزرگ‌نمایی ملایم + تکان هنگام هاور/لمس
+        // هاور: فقط بزرگ‌شدن نرم و خیلی کم — بدون لرزش و چرخش
         sp.userData.hoverT = (sp.userData.hoverT || 0) + dt;
-        const k = 1.07 + Math.sin(sp.userData.hoverT * 12) * 0.03;
+        const q = Math.min(1, sp.userData.hoverT / 0.22);
+        const e = q * q * (3 - 2 * q);
+        const k = 1 + 0.05 * e;
         sp.scale.set(base.x * k, base.y * k, 1);
-        sp.material.rotation = Math.sin(sp.userData.hoverT * 16) * 0.09;
+        sp.material.rotation = 0;
       } else if (sp.userData.type === 'tree' || sp.userData.sway) {
         // تکان طبیعی درخت‌ها در حالت عادی
         const phase = (sp.userData.swayPhase = sp.userData.swayPhase ?? Math.random() * Math.PI * 2);

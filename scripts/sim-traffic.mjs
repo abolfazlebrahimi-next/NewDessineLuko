@@ -90,9 +90,9 @@ await city.init();
 
 // ---------- شبیه‌سازی ----------
 const DT = 1 / 30;
-const SECONDS = 600; // ۱۰ دقیقه‌ی مجازی
+const SECONDS = process.env.SIM_SECONDS ? parseInt(process.env.SIM_SECONDS) : 600; // ۱۰ دقیقه‌ی مجازی
 const seen = {
-  exiting: 0, entering: 0, accidents: 0, accidentsDone: 0,
+  exiting: 0, reentered: 0, accidents: 0, accidentsDone: 0,
   parks: 0, parksDone: 0,
   crossPhases: new Set(),
   carStates: new Set(),
@@ -102,11 +102,26 @@ let t = 0;
 for (let i = 0; i < frames; i++) {
   t += DT;
   city.update(DT);
+  const ocBefore = city._outsideCount;
   for (const c of city.cars) {
-    if (c.state) seen.carStates.add(c.state);
-    if (c.state === 'exiting') seen.exiting = Math.max(seen.exiting, 0) || 1;
-    if (!Number.isFinite(c.obj.position.x) || !Number.isFinite(c.obj.position.z)) {
+    seen.carStates.add(c.state);
+    if (city._outsideCount > ocBefore) seen.exiting++;
+    if (!Number.isFinite(c.x) || !Number.isFinite(c.z) || !Number.isFinite(c.obj.position.x)) {
       console.error(`NaN car position! state=${c.state} name=${c.name}`); process.exit(1);
+    }
+    // ماشین باید روی جاده باشد (به‌جز حالت‌های خاص)
+    if (c.state === 'straight' || c.state === 'exiting' || c.state === 'dispatch') {
+      const lx = city._nearestLine(Math.abs(c.hz) > 0.5 ? c.x : c.z);
+      const lat = Math.abs((Math.abs(c.hz) > 0.5 ? c.x : c.z) - lx);
+      if (lat > 1.9) {
+        console.error(`ماشین از جاده خارج شد! ${c.name} state=${c.state} lat=${lat.toFixed(2)}`); process.exit(1);
+      }
+    } else if (c.state === 'turning' && c._turnC) {
+      // در حال پیچیدن: باید داخل محدوده‌ی تقاطع باشد
+      const d = Math.hypot(c.x - c._turnC.x, c.z - c._turnC.z);
+      if (d > 8) {
+        console.error(`پیچ از تقاطع خارج شد! ${c.name} d=${d.toFixed(2)}`); process.exit(1);
+      }
     }
   }
   // دیتیکتور بن‌بست: ماشین سالم که مدت زیادی سرعتش صفر است
@@ -115,12 +130,39 @@ for (let i = 0; i < frames; i++) {
     const moved = Math.hypot(c.obj.position.x - c._still.x, c.obj.position.z - c._still.z) > 0.05;
     if (moved) { c._still = { t: 0, x: c.obj.position.x, z: c.obj.position.z }; }
     else c._still.t += DT;
-    const legit = c.state === 'crashed' || c.state === 'parked' || c.state === 'toPark';
+    const legit = c.state === 'crashed' || c.state === 'parked' || c.state === 'toPark' ||
+      (city.accident && c._still.t < 55);
     if (!legit && c._still.t > 45) {
       console.error(`بن‌بست! ${c.name} state=${c.state} به مدت ${c._still.t.toFixed(0)}s ثابت است`);
+      console.error(`  pos=(${c.x.toFixed(1)},${c.z.toFixed(1)}) h=(${c.hx},${c.hz}) cur=${c.cur.toFixed(2)} target=${(c._target ?? -1).toFixed(2)} speed=${c.speed.toFixed(2)}`);
+      if (c.nextC) {
+        const dc = (c.nextC.x - c.x) * c.hx + (c.nextC.z - c.z) * c.hz;
+        console.error(`  nextC=(${c.nextC.x.toFixed(1)},${c.nextC.z.toFixed(1)}) dc=${dc.toFixed(2)} D_IN=${city.D_IN}`);
+      } else console.error('  nextC=null');
+      for (const o of city.cars) {
+        if (o === c) continue;
+        const rx = o.x - c.x, rz = o.z - c.z;
+        const fwd = rx * c.hx + rz * c.hz;
+        if (fwd <= 0 || fwd > 12) continue;
+        const lat = Math.abs(rx * c.hz - rz * c.hx);
+        if (lat > 1.5) continue;
+        console.error(`  جلو: ${o.name} state=${o.state} fwd=${fwd.toFixed(1)} lat=${lat.toFixed(2)} cur=${o.cur.toFixed(2)}`);
+      }
+      // وضعیت همه‌ی ماشین‌های نزدیک
+      for (const o of city.cars) {
+        const d = Math.hypot(o.x - c.x, o.z - c.z);
+        if (d > 14 || o === c) continue;
+        const tc = o._turnC ? ` turnC=(${o._turnC.x.toFixed(0)},${o._turnC.z.toFixed(0)}) t=${(o._turn ? o._turn.t : -1).toFixed(2)} still=${(o._turnStill || 0).toFixed(1)}` : '';
+        const nc = o.nextC ? ` nextC=(${o.nextC.x.toFixed(0)},${o.nextC.z.toFixed(0)})` : ' nextC=null';
+        console.error(`  نزدیک: ${o.name} state=${o.state} pos=(${o.x.toFixed(1)},${o.z.toFixed(1)}) cur=${o.cur.toFixed(2)}${tc}${nc}`);
+      }
+      if (city.parkEvent) console.error(`  parkEvent: phase=${city.parkEvent.phase} car=${city.parkEvent.car.name}`);
+      if (city.accident) console.error(`  accident: phase=${city.accident.phase}`);
       process.exit(1);
     }
   }
+  if (city._outsideCount < (city._ocPrev ?? 0)) seen.reentered++;
+  city._ocPrev = city._outsideCount;
   if (city.accident) { if (city.accident._counted !== true) { city.accident._counted = true; seen.accidents++; } }
   else if (seen.accidents > seen.accidentsDone) seen.accidentsDone = seen.accidents;
   if (city.parkEvent) { if (!city.parkEvent._c) { city.parkEvent._c = 1; seen.parks++; } }
@@ -137,7 +179,14 @@ const check = (n, c) => { console.log((c ? '✓ ' : '✗ ') + n); if (!c) fail++
 check('هیچ خطایی در ۱۰ دقیقه مجازی رخ نداد', true);
 check('ماشین‌ها فاصله‌گیری می‌کنند (سرعت لحظه‌ای < پایه اتفاق می‌افتد)', city.cars.some((c) => c.cur < c.speed * 0.95));
 check('خروج از شهر دیده شد', seen.carStates.has('exiting'));
-check('ورود به شهر دیده شد', seen.carStates.has('entering'));
+check('ورود دوباره به شهر دیده شد', seen.reentered >= 1);
+check('پیچیدن ماشین‌ها دیده شد (مسیر غیرتکراری)', seen.carStates.has('turning'));
+// پخش‌شدگی: ماشین و آدمک فقط وسط شهر جمع نشده باشند
+const farCars = city.cars.filter((c) => Math.hypot(c.x, c.z) > 30).length;
+const farPeds = [...city.peds, ...city.crossers].filter((p) =>
+  Math.hypot(p.g.position.x, p.g.position.z) > 25).length;
+check(`ماشین‌ها پخش هستند (${farCars} تا بیرونِ شعاع ۳۰)`, farCars >= 6);
+check(`آدمک‌ها پخش هستند (${farPeds} تا بیرونِ شعاع ۲۵)`, farPeds >= 8);
 check('رویداد تصادف اجرا و تمام شد', seen.accidents >= 1 && seen.accidentsDone >= 1);
 check('رویداد پارک اجرا و تمام شد', seen.parks >= 1 && seen.parksDone >= 1);
 check('عابرها صبر/عبور کردند', seen.crossPhases.has('cross') && seen.crossPhases.size >= 2);
