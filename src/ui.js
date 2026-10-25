@@ -2,6 +2,7 @@
 import { state, addCoins, addDew, addXp, resetGame, save, buildingReady, setBuildingCooldown, cooldownLeft, spend, canAfford } from './state.js';
 import { LAYOUT, ASSET, ITEMS, TRAY_ORDER, CATEGORIES, CROPS, PRICES, BUY_STEPS, xpForLevel, isGroundItem, TEST_MODE, ITEM_SELL_RATIO } from './config.js';
 import { sfx } from './audio.js';
+import { openCinema } from './cinema.js';
 
 const fmt = (n) => Math.round(n).toLocaleString('fa-IR');
 // در حالت تست، موجودی بی‌نهایت نمایش داده می‌شود
@@ -621,6 +622,8 @@ export class UI {
   }
 
   openModal(html, cls = '') {
+    this.modalCleanup?.();
+    this.modalCleanup = null;
     // اگر مودالی باز است، اول ببند
     if (this.activeModal) {
       try { this.activeModal.remove(); } catch (e) { /* ok */ }
@@ -644,6 +647,8 @@ export class UI {
   }
 
   closeModal() {
+    this.modalCleanup?.();
+    this.modalCleanup = null;
     const back = this.modalRoot.querySelector('#modal-backdrop');
     if (back) {
       back.classList.remove('show');
@@ -890,6 +895,7 @@ export class UI {
 
   // ---------- پنل ساختمان ----------
   openBuilding(building) {
+    if (building.id === 'cinema') return openCinema(this);
     const cd = building.action ? building.action.cooldown : 0;
     const ready = buildingReady(building.id, cd);
     const left = cooldownLeft(building.id, cd) / 1000;
