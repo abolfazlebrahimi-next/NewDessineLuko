@@ -1,0 +1,43 @@
+{
+  "name": "newdessineluko",
+  "version": "1.0.0",
+  "description": "شهر لوکو — بازی شهرسازی و مزرعه‌داری شبیه کلش آف کلنز",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node tests/test-game.mjs && node tests/test-sync.mjs && node tests/test-build.mjs && node tests/test-game-path.mjs && node tests/test-ui.mjs && node tests/test-boot.mjs && node tests/test-structures.mjs && node scripts/verify-models.mjs && node scripts/sim-traffic.mjs",
+    "build:single": "vite build --config vite.config.single.mjs && node scripts/make-single.mjs && node scripts/verify-single.mjs && node scripts/verify-models.mjs",
+    "games:path": "node scripts/build-game-path.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/abolfazlebrahimi-next/NewDessineLuko.git"
+  },
+  "keywords": [
+    "game",
+    "farm",
+    "threejs",
+    "luko"
+  ],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/abolfazlebrahimi-next/NewDessineLuko/issues"
+  },
+  "homepage": "https://github.com/abolfazlebrahimi-next/NewDessineLuko#readme",
+  "dependencies": {
+    "three": "^0.169.0"
+  },
+  "devDependencies": {
+    "@gltf-transform/core": "^4.5.1",
+    "@gltf-transform/extensions": "^4.5.1",
+    "@gltf-transform/functions": "^4.5.1",
+    "jsdom": "^30.1.3",
+    "meshoptimizer": "^1.3.0",
+    "sharp": "^0.35.5",
+    "vite": "^5.4.8",
+    "vite-plugin-singlefile": "^2.3.4"
+  }
+}

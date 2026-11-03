@@ -1,0 +1,13 @@
+node_modules/
+dist/
+_design_ref.png
+_design_gen.jpg
+*.log
+.DS_Store
+
+dist-single/
+Luko-Game.html
+
+# پیوندِ dev به پوشه‌ی بازی‌های پروژه‌ی اصلی (مسیرش مالِ همین دستگاه است)
+public/games
+.env

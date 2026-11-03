@@ -1,0 +1,869 @@
+/* ================= مطب دکتر نیلا — لابی و اتاق‌ها =================
+   سبکِ «بازی»: دکمه‌های برجسته با لبه‌ی پایینِ تیره، حرکت‌های فنری و حباب‌های گفتگو */
+.interior {
+  --cl-blue: #4696e5;
+  --cl-blue-dark: #2f6fb5;
+  --cl-orange: #f59322;
+  --cl-orange-dark: #c96f0c;
+  --cl-cream: #fff8ec;
+  --cl-ink: #24324a;
+  --cl-cyan: #22d3ee;
+  --cl-steel: #2b3242;
+
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  overflow: hidden;
+  background: #cfe3f7;
+  font-family: 'Vazirmatn', sans-serif;
+  color: var(--cl-ink);
+  direction: rtl;
+  opacity: 0;
+  transform: scale(1.04);
+  transition: opacity .35s ease, transform .45s cubic-bezier(.2, 1.4, .4, 1);
+  user-select: none;
+  -webkit-user-select: none;
+}
+.interior.show { opacity: 1; transform: none; }
+.interior button { font-family: inherit; cursor: pointer; border: 0; background: none; color: inherit; }
+
+/* ---------- لابی: عکس + دوربین ---------- */
+.cl-viewport { position: absolute; inset: 0; touch-action: none; }
+.cl-stage {
+  position: absolute;
+  left: 0; top: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+.cl-stage.cl-anim { transition: transform .65s cubic-bezier(.65, 0, .25, 1), filter .4s; }
+.cl-bg { display: block; width: 100%; height: 100%; pointer-events: none; }
+.interior.in-room .cl-stage { filter: blur(6px) brightness(.85); }
+
+/* تابلوی خالیِ بالای درِ آهنی */
+.cl-sign {
+  position: absolute;
+  left: 1313px; top: 178px;
+  width: 171px; height: 54px;
+  display: grid;
+  place-items: center;
+  font-size: 31px;
+  font-weight: 900;
+  color: #fff;
+  text-shadow: 0 3px 0 #b8600b, 0 0 12px rgba(255, 230, 180, .6);
+  letter-spacing: -.5px;
+  pointer-events: none;
+}
+
+/* درها: هاله‌ی طلایی موقعِ هاور + برچسبِ شناور */
+.cl-door {
+  position: absolute;
+  border-radius: 46px 46px 14px 14px;
+  outline: 0 solid transparent;
+  transition: box-shadow .25s, background .25s;
+}
+.cl-door::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 0 5px rgba(255, 210, 90, 0), inset 0 0 0 0 rgba(255, 230, 140, 0);
+  transition: box-shadow .25s;
+  pointer-events: none;
+}
+.cl-door:hover::before, .cl-door:focus-visible::before {
+  box-shadow: 0 0 0 6px rgba(255, 205, 80, .85), 0 0 40px 10px rgba(255, 215, 110, .55), inset 0 0 60px rgba(255, 240, 190, .35);
+}
+.cl-door-tag {
+  position: absolute;
+  left: 50%;
+  bottom: -54px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px 10px;
+  border-radius: 999px;
+  background: linear-gradient(#ffb54a, var(--cl-orange));
+  border: 4px solid #fff;
+  box-shadow: 0 6px 0 var(--cl-orange-dark), 0 12px 20px rgba(0, 0, 0, .25);
+  color: #fff;
+  font-size: 25px;
+  font-weight: 900;
+  white-space: nowrap;
+  text-shadow: 0 2px 0 rgba(150, 70, 0, .55);
+  animation: cl-bob 2.4s ease-in-out infinite;
+}
+.cl-door[data-door="paint"] .cl-door-tag { animation-delay: -.8s; bottom: -40px; }
+.cl-door[data-door="vault"] .cl-door-tag { animation-delay: -1.6s; }
+.cl-door-tag b { font-size: 26px; }
+@keyframes cl-bob { 0%, 100% { transform: translate(-50%, 0); } 50% { transform: translate(-50%, -8px); } }
+
+/* آهنین کنار و کمی جلوی درِ آهنی */
+.cl-aheneen {
+  position: absolute;
+  left: 1105px; top: 400px;
+  width: 245px;
+  filter: drop-shadow(0 0 18px rgba(34, 211, 238, .45)) drop-shadow(0 14px 10px rgba(30, 50, 80, .3));
+  cursor: pointer;
+  transform-origin: 50% 100%;
+  animation: cl-idle 3s ease-in-out infinite;
+}
+.cl-aheneen:hover { animation-duration: 1s; }
+@keyframes cl-idle { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-6px) scale(1.015, .99); } }
+
+/* ---------- درِ دکتر: دکمه‌ها فقط در نمای زوم فعال‌اند ---------- */
+.cl-light, .cl-ddoor, .cl-arrow { pointer-events: none; opacity: 0; transition: opacity .3s; }
+.cl-light {
+  position: absolute;
+  width: 24px; height: 24px;
+  border-radius: 50%;
+}
+.cl-ddoor { position: absolute; border-radius: 30px 30px 6px 6px; }
+.interior[data-view="doctor"] .cl-light,
+.interior[data-view="doctor"] .cl-ddoor { pointer-events: auto; opacity: 1; }
+.interior[data-view="doctor"] .cl-arrow { opacity: 1; }
+.interior[data-view="doctor"] .cl-door { pointer-events: none; }
+.interior[data-view="doctor"] .cl-door-tag { opacity: 0; }
+.interior:not([data-view="lobby"]) .cl-door { pointer-events: none; }
+.interior:not([data-view="lobby"]) .cl-door-tag { opacity: 0; transition: opacity .2s; }
+
+/* دکمه‌ی قرمز تا وقتی زده نشده نبض می‌زند */
+.cl-light.red { box-shadow: 0 0 0 0 rgba(255, 70, 60, .7); animation: cl-pulse 1.2s ease-out infinite; }
+.interior.lit-red .cl-light.red,
+.interior.lit-green .cl-light.red { animation: none; }
+.interior.lit-red .cl-light.red { background: radial-gradient(circle, #ffd2cc 0 30%, #ff4636 60%, rgba(255, 60, 50, 0) 72%); box-shadow: 0 0 22px 8px rgba(255, 60, 40, .8); animation: cl-blink .5s steps(2) infinite; }
+.interior.lit-green .cl-light.green { background: radial-gradient(circle, #d8ffe0 0 30%, #2ee06a 60%, rgba(40, 220, 100, 0) 72%); box-shadow: 0 0 26px 10px rgba(40, 230, 110, .85); }
+@keyframes cl-pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 70, 60, .75); } 100% { box-shadow: 0 0 0 22px rgba(255, 70, 60, 0); } }
+@keyframes cl-blink { 50% { opacity: .35; } }
+.cl-ddoor.shake { animation: cl-shake .4s; }
+@keyframes cl-shake { 20%, 60% { transform: translateX(-7px); } 40%, 80% { transform: translateX(7px); } }
+.interior.lit-green .cl-ddoor { box-shadow: 0 0 0 5px rgba(60, 230, 120, .9), 0 0 50px 12px rgba(60, 230, 120, .45); }
+.interior.door-open .cl-ddoor { background: radial-gradient(ellipse at 50% 60%, #fff 0%, rgba(255, 255, 255, .85) 45%, rgba(255, 255, 255, 0) 75%); transition: background .4s; }
+
+/* فلشِ بالای دکمه‌ها؛ وقتی سبز شد می‌رود روی در */
+.cl-arrow {
+  position: absolute;
+  left: 446px; top: 384px;
+  width: 64px; height: 38px;
+  background: linear-gradient(var(--cl-orange), #ff7a1a);
+  clip-path: polygon(0 50%, 42% 0, 42% 28%, 100% 28%, 100% 72%, 42% 72%, 42% 100%);
+  filter: drop-shadow(0 3px 0 var(--cl-orange-dark));
+  animation: cl-poke .8s ease-in-out infinite;
+  transition: left .5s, top .5s, opacity .3s;
+}
+.interior.lit-green .cl-arrow { left: 446px; top: 415px; }
+.interior.lit-red .cl-arrow { opacity: .35 !important; }
+@keyframes cl-poke { 0%, 100% { translate: 0 0; } 50% { translate: 12px 0; } }
+
+/* ---------- HUD ---------- */
+.cl-hud {
+  position: absolute;
+  top: max(14px, env(safe-area-inset-top));
+  inset-inline: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  pointer-events: none;
+  z-index: 5;
+}
+.cl-back {
+  pointer-events: auto;
+  width: 58px; height: 58px;
+  border-radius: 20px;
+  background: linear-gradient(#ffb54a, var(--cl-orange)) !important;
+  border: 4px solid #fff !important;
+  box-shadow: 0 5px 0 var(--cl-orange-dark), 0 10px 18px rgba(0, 0, 0, .25);
+  color: #fff !important;
+  font-size: 26px;
+  font-weight: 900;
+  display: grid;
+  place-items: center;
+  transition: transform .12s;
+}
+.cl-back:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--cl-orange-dark); }
+.cl-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 18px 6px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .92);
+  border: 3px solid #fff;
+  box-shadow: 0 5px 0 #bcd2ea, 0 10px 18px rgba(0, 0, 0, .15);
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--cl-blue-dark);
+}
+.cl-title img { width: 38px; height: 38px; object-fit: cover; object-position: top; border-radius: 50%; background: #e9f3fc; }
+
+/* حبابِ گفتگوی پایینِ صفحه */
+.cl-say {
+  position: absolute;
+  left: 50%;
+  bottom: max(22px, env(safe-area-inset-bottom));
+  transform: translate(-50%, 30px) scale(.9);
+  max-width: min(560px, calc(100% - 28px));
+  padding: 14px 22px;
+  border-radius: 22px;
+  background: #fff;
+  border: 4px solid var(--cl-blue);
+  box-shadow: 0 6px 0 var(--cl-blue-dark), 0 14px 26px rgba(0, 0, 0, .22);
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.8;
+  text-align: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .25s, transform .35s cubic-bezier(.2, 1.5, .4, 1);
+  z-index: 5;
+}
+.cl-say.show { opacity: 1; transform: translate(-50%, 0) scale(1); }
+.cl-say b.r { color: #e5484d; }
+.cl-say b.g { color: #1f9e4c; }
+.interior.in-room .cl-say { display: none; }
+
+/* فلش‌های جابه‌جایی بین درها (فقط وقتی لابی از صفحه پهن‌تر است) */
+.cl-pan {
+  position: absolute;
+  top: 50%;
+  width: 54px; height: 54px;
+  margin-top: -27px;
+  border-radius: 50%;
+  background: linear-gradient(#ffb54a, var(--cl-orange)) !important;
+  border: 4px solid #fff !important;
+  box-shadow: 0 5px 0 var(--cl-orange-dark), 0 10px 18px rgba(0, 0, 0, .25);
+  color: #fff !important;
+  font-size: 24px; font-weight: 900;
+  display: none;
+  place-items: center;
+  z-index: 5;
+  animation: cl-poke .9s ease-in-out infinite;
+}
+.cl-pan.prev { right: 10px; }
+.cl-pan.next { left: 10px; animation-direction: reverse; }
+.cl-pan:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--cl-orange-dark); }
+.interior.narrow[data-view="lobby"] .cl-pan { display: grid; }
+
+/* فلشِ سفیدِ ورود به اتاق */
+.cl-flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 4; }
+.cl-flash.go { animation: cl-flash .55s ease-out; }
+@keyframes cl-flash { 0% { opacity: 0; } 30% { opacity: .9; } 100% { opacity: 0; } }
+
+/* ---------- دکمه‌های بازی ---------- */
+.cl-btn {
+  --b: #58c470; --bd: #2e8b46;
+  padding: 11px 22px 13px;
+  border-radius: 16px;
+  background: linear-gradient(color-mix(in srgb, var(--b) 75%, #fff), var(--b)) !important;
+  box-shadow: 0 5px 0 var(--bd), 0 9px 16px rgba(0, 0, 0, .2);
+  color: #fff !important;
+  font-size: 16px;
+  font-weight: 900;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, .18);
+  transition: transform .1s, box-shadow .1s, filter .15s;
+  white-space: nowrap;
+}
+.cl-btn:hover { filter: brightness(1.06); }
+.cl-btn:active:not(:disabled) { transform: translateY(4px); box-shadow: 0 1px 0 var(--bd); }
+.cl-btn:disabled { filter: grayscale(.8); opacity: .7; cursor: default; }
+.cl-btn.blue { --b: #4696e5; --bd: #2f6fb5; }
+.cl-btn.cyan { --b: #16b9d4; --bd: #0b7f93; }
+.cl-btn.red { --b: #e5484d; --bd: #a52a2f; }
+.cl-btn.green { --b: #58c470; --bd: #2e8b46; }
+.cl-btn.ghost { --b: #fff; --bd: #c6d3e4; color: var(--cl-ink) !important; text-shadow: none; background: #fff !important; }
+
+/* ---------- صحنه‌ی اتاق‌ها ---------- */
+.cl-scene {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transform: scale(.94);
+  pointer-events: none;
+  transition: opacity .35s, transform .45s cubic-bezier(.2, 1.4, .4, 1);
+  z-index: 3;
+}
+.cl-scene.show { opacity: 1; transform: none; pointer-events: auto; }
+
+/* ===== اتاق دکتر نیلا ===== */
+.room-doctor {
+  background:
+    radial-gradient(ellipse at 70% 20%, rgba(255, 255, 255, .9), transparent 55%),
+    linear-gradient(#e7f1fb 0 64%, #cfe2f5 64% 66%, #f7efe2 66%);
+}
+.dr-window {
+  position: absolute; top: 12%; left: 8%;
+  width: 24%; height: 32%;
+  border: 10px solid #fff;
+  border-radius: 26px;
+  background: linear-gradient(#9fd4ff, #d9f0ff 70%, #a5dc8c 70%);
+  box-shadow: 0 8px 0 #c7d9ec;
+}
+.dr-window span { position: absolute; background: #fff; }
+.dr-window span:first-child { left: 50%; top: 0; bottom: 0; width: 8px; transform: translateX(-50%); }
+.dr-window span:last-child { top: 50%; left: 0; right: 0; height: 8px; transform: translateY(-50%); }
+.dr-chart {
+  position: absolute; top: 14%; right: 9%;
+  padding: 14px 18px;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 6px 0 #c7d9ec;
+  font-weight: 900; font-size: 18px; line-height: 2;
+  transform: rotate(3deg);
+}
+.dr-desk {
+  position: absolute; bottom: 0; right: 4%;
+  width: 46%; height: 26%;
+  border-radius: 30px 30px 0 0;
+  background: linear-gradient(#fff 0 18%, #e6eef8 18%);
+  box-shadow: 0 -6px 0 #cfdcec inset;
+}
+.dr-nila {
+  position: absolute;
+  bottom: 3%; right: 12%;
+  height: min(70%, 560px);
+  filter: drop-shadow(0 16px 14px rgba(30, 60, 100, .25));
+  transform-origin: 50% 100%;
+  animation: cl-idle 3.2s ease-in-out infinite;
+}
+.dr-nila.hop { animation: dr-hop .6s cubic-bezier(.2, 1.6, .4, 1), cl-idle 3.2s ease-in-out .6s infinite; }
+@keyframes dr-hop { 0% { transform: translateY(0) scale(1); } 35% { transform: translateY(-34px) scale(.96, 1.05); } 70% { transform: translateY(0) scale(1.06, .94); } 100% { transform: none; } }
+
+.dr-panel {
+  position: absolute;
+  left: 4%;
+  top: 50%;
+  transform: translateY(-50%);
+  width: min(560px, 54%);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.dr-bubble {
+  position: relative;
+  padding: 18px 22px;
+  border-radius: 26px;
+  background: #fff;
+  border: 4px solid var(--cl-blue);
+  box-shadow: 0 7px 0 var(--cl-blue-dark), 0 16px 30px rgba(30, 60, 100, .2);
+  animation: cl-pop .45s cubic-bezier(.2, 1.6, .4, 1);
+}
+.dr-bubble::after {
+  content: '';
+  position: absolute;
+  right: -20px; top: 40%;
+  border: 14px solid transparent;
+  border-left-color: var(--cl-blue);
+}
+.dr-bubble b { color: var(--cl-blue-dark); font-size: 15px; font-weight: 900; }
+.dr-text { margin-top: 4px; font-size: 20px; font-weight: 800; line-height: 1.8; }
+.dr-bubble small { display: block; margin-top: 6px; color: #6b7c94; font-size: 13px; font-weight: 600; }
+@keyframes cl-pop { 0% { transform: scale(.6); opacity: 0; } 100% { transform: none; opacity: 1; } }
+
+.dr-moods { display: flex; gap: 10px; justify-content: space-between; }
+.dr-mood {
+  flex: 1;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 10px 4px 8px;
+  border-radius: 22px;
+  background: #fff !important;
+  box-shadow: 0 6px 0 #c6d3e4, 0 10px 18px rgba(30, 60, 100, .14);
+  animation: cl-pop .5s cubic-bezier(.2, 1.6, .4, 1) both;
+  animation-delay: var(--d);
+  transition: transform .15s, box-shadow .15s;
+}
+.dr-mood .face { font-size: 44px; line-height: 1.15; transition: transform .2s; }
+.dr-mood .lbl { font-size: 14px; font-weight: 900; color: #51627b; }
+.dr-mood:hover .face { transform: scale(1.18) rotate(-6deg); }
+.dr-mood:active { transform: translateY(5px); box-shadow: 0 1px 0 #c6d3e4; }
+.dr-mood.picked { background: #fff6dd !important; box-shadow: 0 6px 0 #f0b84a, 0 0 0 4px #ffc94d, 0 12px 24px rgba(240, 170, 40, .35); }
+.dr-mood.picked .face { animation: dr-wiggle .6s; }
+@keyframes dr-wiggle { 25% { transform: rotate(-14deg) scale(1.2); } 75% { transform: rotate(14deg) scale(1.2); } }
+
+.dr-after { display: flex; flex-direction: column; gap: 12px; }
+.dr-reward {
+  align-self: flex-start;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: linear-gradient(#fff3c4, #ffe08a);
+  border: 3px solid #fff;
+  box-shadow: 0 5px 0 #d9a93a;
+  font-weight: 900;
+  animation: cl-pop .45s cubic-bezier(.2, 1.6, .4, 1);
+}
+.dr-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.dr-breath {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 18px;
+  border-radius: 26px;
+  background: rgba(255, 255, 255, .92);
+  box-shadow: 0 7px 0 #c6d3e4;
+  animation: cl-pop .4s cubic-bezier(.2, 1.6, .4, 1);
+}
+.dr-breath .orb {
+  width: 120px; height: 120px;
+  border-radius: 50%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: radial-gradient(circle at 35% 30%, #fff, #a9d6ff 45%, #4696e5);
+  box-shadow: 0 0 40px rgba(70, 150, 229, .55);
+  color: #fff; text-shadow: 0 2px 4px rgba(20, 60, 120, .5);
+  transition: transform 4s ease-in-out;
+  transform: scale(.75);
+}
+.dr-breath .orb[data-phase="inhale"] { transform: scale(1.25); }
+.dr-breath .orb[data-phase="hold"] { transform: scale(1.25); box-shadow: 0 0 60px rgba(143, 107, 201, .6); }
+.dr-breath .orb[data-phase="exhale"] { transform: scale(.75); }
+.dr-breath .phase { font-size: 15px; font-weight: 900; }
+.dr-breath .sec { font-size: 30px; font-weight: 900; }
+.dr-breath .cycles { margin-top: 18px; font-weight: 800; color: #51627b; }
+
+/* ===== اتاق رازها ===== */
+.room-vault {
+  background:
+    radial-gradient(ellipse at 50% 30%, rgba(34, 211, 238, .18), transparent 60%),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, .03) 0 2px, transparent 2px 120px),
+    linear-gradient(#3b4560, #1d2333);
+  color: #fff;
+}
+.vt-rivets {
+  position: absolute; inset: 18px;
+  border-radius: 30px;
+  border: 3px solid rgba(255, 255, 255, .08);
+  background-image: radial-gradient(circle, rgba(255, 255, 255, .25) 2.5px, transparent 3px);
+  background-size: 60px 60px;
+  background-position: 30px 30px;
+  -webkit-mask: linear-gradient(#000 0 0) top/100% 34px no-repeat, linear-gradient(#000 0 0) bottom/100% 34px no-repeat;
+  mask: linear-gradient(#000 0 0) top/100% 34px no-repeat, linear-gradient(#000 0 0) bottom/100% 34px no-repeat;
+  pointer-events: none;
+}
+.vt-wrap {
+  position: absolute;
+  left: 4%; top: 50%;
+  transform: translateY(-46%);
+  width: min(62%, 640px);
+  aspect-ratio: 1.15;
+  perspective: 1400px;
+}
+.vt-safe {
+  position: absolute; inset: 0;
+  border-radius: 40px;
+  background: linear-gradient(145deg, #6d7a93, #3a4459);
+  box-shadow: inset 0 0 0 10px #4c576e, inset 0 0 0 14px #2a3142, 0 18px 0 #161b26, 0 30px 50px rgba(0, 0, 0, .45);
+}
+.vt-inside {
+  position: absolute; inset: 22px;
+  border-radius: 26px;
+  background: radial-gradient(ellipse at 50% 0%, rgba(34, 211, 238, .25), transparent 60%), #141924;
+  box-shadow: inset 0 10px 30px rgba(0, 0, 0, .7);
+  padding: 22px;
+  display: flex; flex-direction: column; gap: 14px;
+  overflow: hidden;
+}
+.vt-shelf {
+  flex: 1;
+  display: flex; flex-wrap: wrap; align-content: flex-start; gap: 14px;
+  overflow-y: auto;
+  padding: 6px;
+}
+.vt-empty { margin: auto; color: rgba(255, 255, 255, .5); font-weight: 700; }
+.vt-env {
+  position: relative;
+  width: 132px; height: 88px;
+  border-radius: 12px;
+  background: linear-gradient(#fff6e2, #f1dfb8) !important;
+  box-shadow: 0 5px 0 #b89b62, 0 10px 18px rgba(0, 0, 0, .4);
+  color: #5b3a1a !important;
+  transform: rotate(var(--r));
+  transition: transform .2s;
+  overflow: hidden;
+  padding: 26px 8px 6px;
+}
+.vt-env::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 46px;
+  background: linear-gradient(#f5e6c6, #e7cf9e);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+}
+.vt-env .seal { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); font-size: 20px; }
+.vt-env .t { position: relative; display: block; margin-top: 18px; font-size: 13px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vt-env:hover { transform: rotate(0deg) translateY(-6px) scale(1.05); }
+.vt-env.fly { animation: vt-fly .8s cubic-bezier(.2, 1.3, .4, 1); }
+@keyframes vt-fly { 0% { transform: translate(260px, -120px) rotate(40deg) scale(.4); opacity: 0; } 100% { transform: rotate(var(--r)); opacity: 1; } }
+.vt-new { align-self: center; }
+
+/* درِ گاوصندوق: روی باز شدن حولِ لولا (سمت چپ) می‌چرخد */
+.vt-door {
+  position: absolute; inset: 22px;
+  border-radius: 26px;
+  background:
+    radial-gradient(circle at 30% 25%, rgba(255, 255, 255, .25), transparent 40%),
+    linear-gradient(150deg, #7b89a5, #4a5671) !important;
+  box-shadow: inset 0 0 0 8px #5b6883, inset 0 0 0 12px #39435a, 0 0 0 4px rgba(34, 211, 238, .4), 0 0 40px rgba(34, 211, 238, .25);
+  transform-origin: 0 50%;
+  transition: transform .9s cubic-bezier(.6, 0, .3, 1.2);
+  z-index: 2;
+  display: grid; place-items: center;
+}
+.vt-safe.open .vt-door { transform: rotateY(-108deg); pointer-events: none; }
+.vt-safe.open .vt-hint { opacity: 0; }
+.vt-bolts {
+  position: absolute; inset: 28px;
+  border-radius: 18px;
+  background-image: radial-gradient(circle, #cdd6e6 5px, #6b7894 6px, transparent 7px);
+  background-size: 52px 52px;
+  -webkit-mask: linear-gradient(#000 0 0) top/100% 26px no-repeat, linear-gradient(#000 0 0) bottom/100% 26px no-repeat;
+  mask: linear-gradient(#000 0 0) top/100% 26px no-repeat, linear-gradient(#000 0 0) bottom/100% 26px no-repeat;
+}
+.vt-wheel {
+  position: relative;
+  width: 42%; aspect-ratio: 1;
+  border-radius: 50%;
+  border: 14px solid #f59322;
+  box-shadow: 0 6px 0 #a85a08, inset 0 0 0 8px #ffb54a, 0 0 30px rgba(245, 147, 34, .35);
+  transition: transform .5s cubic-bezier(.5, 0, .3, 1.3);
+}
+.vt-wheel i { position: absolute; left: 50%; top: 50%; width: 120%; height: 14px; margin: -7px 0 0 -60%; background: #f59322; border-radius: 7px; }
+.vt-wheel i:nth-child(2) { transform: rotate(60deg); }
+.vt-wheel i:nth-child(3) { transform: rotate(120deg); }
+.vt-wheel::after { content: ''; position: absolute; inset: 32%; border-radius: 50%; background: #ffb54a; box-shadow: 0 0 0 6px #f59322; }
+.vt-safe.spin .vt-wheel { transform: rotate(240deg); }
+.vt-hint {
+  position: absolute; bottom: 12%;
+  padding: 6px 16px; border-radius: 999px;
+  background: rgba(20, 25, 36, .7); color: var(--cl-cyan);
+  font-weight: 900; font-size: 15px;
+  animation: cl-bob2 1.6s ease-in-out infinite;
+  transition: opacity .3s;
+}
+@keyframes cl-bob2 { 50% { transform: translateY(-6px); } }
+
+.vt-guard {
+  position: absolute;
+  right: 3%; bottom: 2%;
+  width: min(32%, 360px);
+  display: flex; flex-direction: column; align-items: center;
+}
+.vt-guard img {
+  width: 82%;
+  filter: drop-shadow(0 0 24px rgba(34, 211, 238, .5));
+  transform-origin: 50% 100%;
+  animation: cl-idle 3s ease-in-out infinite;
+  order: 2;
+}
+.vt-guard.nod img { animation: dr-hop .55s cubic-bezier(.2, 1.6, .4, 1), cl-idle 3s ease-in-out .55s infinite; }
+.vt-bubble {
+  order: 1;
+  margin-bottom: -6px;
+  padding: 14px 18px;
+  border-radius: 22px;
+  background: #eef2f7;
+  color: var(--cl-ink);
+  border: 4px solid var(--cl-cyan);
+  box-shadow: 0 6px 0 #0b7f93, 0 0 30px rgba(34, 211, 238, .3);
+  position: relative;
+  animation: cl-pop .45s cubic-bezier(.2, 1.6, .4, 1);
+}
+.vt-bubble::after { content: ''; position: absolute; bottom: -24px; left: 50%; border: 12px solid transparent; border-top-color: var(--cl-cyan); transform: translateX(-50%); }
+.vt-bubble b { color: #0b7f93; font-size: 14px; font-weight: 900; }
+.vt-bubble p { margin-top: 4px; font-size: 16px; font-weight: 800; line-height: 1.8; }
+
+.vt-modal {
+  position: absolute; inset: 0;
+  display: none;
+  place-items: center;
+  background: rgba(10, 14, 22, .55);
+  z-index: 6;
+}
+.vt-modal.show { display: grid; }
+.vt-paper {
+  width: min(440px, calc(100% - 32px));
+  padding: 22px 24px;
+  border-radius: 10px 10px 26px 26px;
+  color: #3d2c15;
+  background:
+    repeating-linear-gradient(transparent 0 33px, rgba(70, 150, 229, .25) 33px 35px),
+    linear-gradient(#fffdf6, #fff3d9);
+  box-shadow: 0 8px 0 #d8c08d, 0 24px 50px rgba(0, 0, 0, .45);
+  animation: vt-paperIn .5s cubic-bezier(.2, 1.5, .4, 1);
+}
+@keyframes vt-paperIn { 0% { transform: translateY(80px) rotate(-8deg) scale(.7); opacity: 0; } 100% { transform: rotate(-1deg); opacity: 1; } }
+.vt-paper.fold { animation: vt-fold .52s ease-in forwards; }
+@keyframes vt-fold { 0% { transform: rotate(-1deg); } 40% { transform: scaleY(.25) rotate(-1deg); } 100% { transform: translate(-60vw, -10vh) scale(.1) rotate(-60deg); opacity: 0; } }
+.vt-paper.shake { animation: cl-shake .4s; }
+.vt-paper h3 { font-size: 21px; font-weight: 900; margin-bottom: 12px; }
+.vt-paper form { display: flex; flex-direction: column; gap: 10px; }
+.vt-paper input, .vt-paper textarea {
+  width: 100%;
+  padding: 11px 14px;
+  font-family: inherit;
+  font-size: 16px;
+  border-radius: 14px;
+  border: 3px solid #e7d3a6;
+  background: rgba(255, 255, 255, .85);
+  color: #3d2c15;
+  outline: none;
+  resize: none;
+}
+.vt-paper input:focus, .vt-paper textarea:focus { border-color: var(--cl-cyan); box-shadow: 0 0 0 4px rgba(34, 211, 238, .2); }
+.vt-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.vt-err { min-height: 1.4em; color: #d9363e; font-weight: 800; font-size: 14px; }
+.vt-revealed { display: none; font-size: 18px; font-weight: 700; line-height: 2.1; white-space: pre-wrap; overflow-wrap: anywhere; }
+.vt-revealed.show { display: block; animation: cl-pop .4s; }
+
+/* ===== اتاق نقاشی: نشسته پشتِ میز ===== */
+.room-paint { background: #f6e7cf; }
+.pt-room {
+  position: absolute; inset: -20px;
+  background-size: 330% auto;
+  background-position: 50% 46%;
+  filter: blur(3px) saturate(1.1);
+  transform: scale(1.02);
+}
+.pt-room::after { content: ''; position: absolute; inset: 0; background: linear-gradient(rgba(255, 248, 236, .25), rgba(255, 248, 236, .55)); }
+/* نقاشی‌های ذخیره‌شده با پونز روی دیوار */
+.pt-wall {
+  position: absolute; top: max(86px, 10%); left: 50%;
+  transform: translateX(-50%);
+  display: flex; gap: 14px;
+  max-width: 90%;
+}
+.pt-pin {
+  width: 86px; height: 64px;
+  object-fit: cover;
+  border: 5px solid #fff;
+  border-radius: 6px;
+  box-shadow: 0 6px 12px rgba(80, 50, 20, .3);
+  transform: rotate(var(--r));
+  position: relative;
+}
+.pt-pin.new { animation: pt-pinIn .7s cubic-bezier(.2, 1.6, .4, 1); }
+@keyframes pt-pinIn { 0% { transform: translateY(300px) scale(1.8) rotate(0); opacity: 0; } 100% { transform: rotate(var(--r)); opacity: 1; } }
+
+/* میز چوبی که از پایینِ صفحه شروع می‌شود؛ برگه رویش است */
+.pt-table {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 68%;
+  padding: 3% 4% 2%;
+  /* سمتِ چپ (انتهای خط در RTL) جای رنگو می‌ماند تا روی برگه نیفتد */
+  padding-inline-end: clamp(140px, 19vw, 240px);
+  border-radius: 50% 50% 0 0 / 14% 14% 0 0;
+  background:
+    repeating-linear-gradient(92deg, rgba(120, 70, 20, .08) 0 3px, transparent 3px 26px),
+    linear-gradient(#e9b272, #c98a47 40%, #b5763a);
+  box-shadow: inset 0 14px 0 #f3c78c, 0 -10px 30px rgba(90, 50, 10, .25);
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-rows: 1fr auto;
+  gap: 12px 18px;
+  align-items: center;
+}
+.pt-paper {
+  grid-column: 2 / -1; grid-row: 1;
+  position: relative;
+  justify-self: center;
+  width: min(100%, 860px);
+  height: 100%;
+  max-height: 520px;
+  background: #fff;
+  border-radius: 6px;
+  box-shadow: 0 10px 0 rgba(90, 50, 10, .25), 0 16px 30px rgba(60, 30, 5, .3);
+  overflow: hidden;
+}
+.pt-paper canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+.pt-confirm {
+  position: absolute; bottom: 12px; left: 50%;
+  transform: translateX(-50%);
+  display: none; align-items: center; gap: 8px;
+  padding: 10px 14px; border-radius: 18px;
+  background: #fff; box-shadow: 0 6px 18px rgba(0, 0, 0, .2);
+  font-weight: 900;
+}
+.pt-confirm.show { display: flex; animation: cl-pop .35s; }
+.pt-confirm .cl-btn { padding: 7px 16px 9px; font-size: 14px; }
+
+/* مدادشمعی‌ها کنارِ برگه */
+/* ستونِ اول در RTL سمتِ راست است */
+.pt-crayons {
+  grid-column: 1; grid-row: 1;
+  display: grid; grid-template-columns: repeat(2, 26px); gap: 12px 10px;
+}
+.pt-crayon {
+  width: 26px; height: 92px;
+  border-radius: 6px 6px 8px 8px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, .35), transparent 40%, rgba(0, 0, 0, .15)), var(--c) !important;
+  clip-path: polygon(30% 0, 70% 0, 100% 16%, 100% 100%, 0 100%, 0 16%);
+  box-shadow: inset 0 -26px 0 rgba(255, 255, 255, .25);
+  transition: transform .2s cubic-bezier(.2, 1.6, .4, 1);
+  transform: rotate(-6deg);
+}
+.pt-crayon:nth-child(even) { transform: rotate(5deg); }
+.pt-crayon:hover { transform: translateY(-6px) rotate(0); }
+.pt-crayon.on { transform: translateY(-16px) rotate(0) scale(1.08); filter: drop-shadow(0 0 8px #fff) drop-shadow(0 6px 4px rgba(0, 0, 0, .3)); }
+
+.pt-tools {
+  grid-column: 1 / -1; grid-row: 2;
+  justify-self: center;
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+  border-radius: 24px;
+  background: rgba(255, 248, 236, .9);
+  box-shadow: 0 6px 0 #a8692f;
+}
+.pt-brush, .pt-eraser, .pt-clear {
+  width: 50px; height: 50px;
+  border-radius: 16px;
+  background: #fff !important;
+  box-shadow: 0 4px 0 #d9c3a0;
+  display: grid; place-items: center;
+  font-size: 22px;
+  transition: transform .1s;
+}
+.pt-brush i { display: block; border-radius: 50%; background: #3d2c15; }
+.pt-brush.on, .pt-eraser.on { background: #ffe8b8 !important; box-shadow: 0 4px 0 #e0a640, 0 0 0 3px #f5b94a; }
+.pt-brush:active, .pt-eraser:active, .pt-clear:active { transform: translateY(3px); box-shadow: 0 1px 0 #d9c3a0; }
+
+/* رنگو کنارِ میز سرک می‌کشد */
+.pt-rango {
+  grid-column: 1; grid-row: 1;
+  position: relative;
+  width: clamp(120px, 16vw, 210px);
+  align-self: end;
+}
+.pt-rango img { width: 100%; transform-origin: 50% 100%; animation: cl-idle 3s ease-in-out infinite; }
+.room-paint > .pt-rango { position: absolute; left: 1.5%; bottom: 14%; z-index: 2; }
+.pt-bubble {
+  position: absolute;
+  bottom: 96%;
+  left: 0;
+  width: clamp(190px, 22vw, 300px);
+  padding: 12px 16px;
+  border-radius: 20px;
+  background: #fff;
+  border: 4px solid #f2994a;
+  box-shadow: 0 6px 0 #c56f22;
+  font-weight: 800; font-size: 15px; line-height: 1.8;
+}
+.pt-bubble b { color: #c56f22; font-size: 13px; }
+
+/* ---------- موبایل ---------- */
+@media (max-width: 760px) and (orientation: portrait) {
+  .cl-back { width: 48px; height: 48px; font-size: 22px; border-radius: 16px; }
+  .cl-title { font-size: 15px; }
+  .cl-title img { width: 30px; height: 30px; }
+  .cl-say { font-size: 15px; padding: 10px 16px; }
+  .cl-btn { font-size: 14px; padding: 9px 16px 11px; }
+
+  .dr-window, .dr-chart, .dr-desk { display: none; }
+  .dr-nila { height: 32%; right: auto; left: 50%; transform: translateX(-50%); bottom: auto; top: 76px; animation: none; }
+  .dr-nila.hop { animation: none; }
+  .dr-panel { left: 12px; right: 12px; width: auto; top: auto; bottom: 14px; transform: none; gap: 10px; }
+  .dr-bubble::after { display: none; }
+  .dr-text { font-size: 16px; }
+  .dr-mood .face { font-size: 32px; }
+  .dr-mood .lbl { font-size: 12px; }
+  .dr-breath .orb { width: 90px; height: 90px; }
+
+  .vt-wrap { left: 12px; right: 12px; width: auto; top: 76px; transform: none; aspect-ratio: auto; height: 50%; }
+  .vt-guard { width: 100%; right: 0; bottom: 8px; flex-direction: row; align-items: flex-end; padding: 0 10px; gap: 6px; }
+  .vt-guard img { width: 110px; order: 1; }
+  .vt-bubble { order: 2; margin: 0 0 20px; flex: 1; }
+  .vt-bubble::after { display: none; }
+  .vt-bubble p { font-size: 14px; }
+  .vt-env { width: 108px; height: 76px; }
+
+  .pt-table { height: 74%; grid-template-columns: 1fr; grid-template-rows: 1fr auto auto; padding: 4% 3% 2%; gap: 10px; }
+  .pt-paper { grid-column: 1; }
+  .pt-paper { grid-column: 1; grid-row: 1; }
+  .pt-crayons { grid-column: 1; grid-row: 2; grid-template-columns: repeat(8, 26px); justify-content: center; }
+  .pt-crayon { height: 54px; }
+  .pt-tools { grid-row: 3; gap: 6px; padding: 8px; }
+  .pt-brush, .pt-eraser, .pt-clear { width: 42px; height: 42px; font-size: 18px; }
+  .room-paint > .pt-rango { width: 92px; left: auto; right: 4px; bottom: 76%; }
+  .pt-bubble { width: 200px; left: auto; right: 90%; bottom: 20%; font-size: 13px; }
+  .pt-wall { top: 74px; gap: 8px; }
+  .pt-pin { width: 60px; height: 44px; }
+}
+
+/* ---------- گوشیِ افقی (ارتفاعِ ۵۲۰ یا کمتر): همان چیدمانِ افقیِ دسکتاپ، فشرده ----------
+   بالای صفحه (حدودِ ۶۴ پیکسل) مالِ دکمه‌ی برگشت و عنوان است؛ چیزی آن‌جا نمی‌نشیند.
+   این بخش برای همه‌ی صحنه‌های داخلِ ساختمان‌هاست (کلاس‌های مشترکِ cl-*) به‌علاوه‌ی اتاق‌های مطب. */
+@media (max-height: 520px) and (orientation: landscape) {
+  .cl-hud { top: max(8px, env(safe-area-inset-top)); inset-inline: max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-left)); gap: 8px; }
+  .cl-back { width: 44px; height: 44px; font-size: 20px; border-radius: 14px; border-width: 3px !important; }
+  .cl-title { font-size: 14px; padding: 4px 14px 4px 6px; border-width: 2px; }
+  .cl-title img { width: 28px; height: 28px; }
+  .cl-say { font-size: 14px; line-height: 1.6; padding: 8px 16px; border-width: 3px; bottom: max(10px, env(safe-area-inset-bottom)); max-width: min(520px, calc(100% - 140px)); }
+  .cl-btn { font-size: 14px; padding: 8px 14px 10px; }
+  .cl-pan { width: 42px; height: 42px; margin-top: -21px; font-size: 18px; border-width: 3px !important; }
+
+  /* اتاق دکتر نیلا: پنل چپ، نیلا راست، پنجره و نمودار بینشان */
+  .dr-window { top: 70px; left: auto; right: 31%; width: 14%; height: 28%; border-width: 6px; border-radius: 16px; }
+  .dr-chart { top: auto; bottom: 30%; right: 31%; padding: 6px 10px; border-radius: 12px; font-size: 12px; line-height: 1.7; }
+  .dr-desk { height: 22%; }
+  .dr-nila { height: min(80%, 340px); right: 7%; }
+  .dr-panel { left: 3%; width: min(470px, 54%); top: calc(50% + 24px); gap: 10px; }
+  .dr-bubble { padding: 10px 14px; border-radius: 18px; border-width: 3px; }
+  .dr-bubble::after { right: -17px; border-width: 11px; }
+  .dr-bubble b { font-size: 12px; }
+  .dr-text { font-size: 15px; line-height: 1.6; }
+  .dr-bubble small { font-size: 11px; margin-top: 2px; }
+  .dr-moods { gap: 6px; }
+  .dr-mood { padding: 6px 2px 5px; border-radius: 16px; }
+  .dr-mood .face { font-size: 30px; }
+  .dr-mood .lbl { font-size: 11px; }
+  .dr-after { gap: 8px; }
+  .dr-reward { padding: 6px 14px; font-size: 13px; }
+  .dr-breath { padding: 10px; gap: 6px; border-radius: 20px; }
+  .dr-breath .orb { width: 78px; height: 78px; }
+  .dr-breath .sec { font-size: 22px; }
+  .dr-breath .cycles { margin-top: 8px; }
+
+  /* اتاق رازها: گاوصندوق به اندازه‌ی ارتفاعِ صفحه، آهنین کنارش */
+  .vt-rivets { inset: 8px; }
+  .vt-wrap { top: 62px; left: 3%; transform: none; height: calc(100% - 72px); width: auto; max-width: 60%; }
+  .vt-inside { inset: 14px; padding: 12px; gap: 8px; }
+  .vt-shelf { gap: 10px; }
+  .vt-env { width: 100px; height: 68px; padding-top: 20px; }
+  .vt-env .seal { top: 10px; font-size: 16px; }
+  .vt-env .t { margin-top: 10px; font-size: 11px; }
+  .vt-guard { width: min(32%, 280px); right: 2%; bottom: 0; }
+  .vt-guard img { width: 58%; }
+  .vt-bubble { padding: 8px 12px; border-radius: 16px; border-width: 3px; }
+  .vt-bubble b { font-size: 12px; }
+  .vt-bubble p { font-size: 13px; line-height: 1.6; }
+  .vt-paper { max-height: calc(100% - 20px); overflow-y: auto; padding: 14px 16px; }
+  .vt-paper h3 { font-size: 17px; margin-bottom: 8px; }
+  .vt-paper form { gap: 6px; }
+
+  /* اتاق نقاشی: میز از زیرِ عنوان شروع می‌شود؛ مدادها دو ردیفِ کوتاه، ابزارها پایین */
+  .pt-wall { top: 10px; gap: 8px; max-width: 46%; }
+  .pt-pin { width: 54px; height: 40px; border-width: 3px; }
+  .pt-table { height: calc(100% - 62px); padding: 12px 2% 8px; padding-inline-end: clamp(104px, 15vw, 160px); gap: 8px 12px; }
+  .pt-crayons { grid-template-columns: repeat(4, 20px); gap: 8px 7px; align-self: center; }
+  .pt-crayon { width: 20px; height: 50px; }
+  .pt-crayon.on { transform: translateY(-8px) rotate(0) scale(1.08); }
+  .pt-tools { padding: 6px 10px; gap: 6px; border-radius: 18px; box-shadow: 0 4px 0 #a8692f; }
+  .pt-brush, .pt-eraser, .pt-clear { width: 38px; height: 38px; font-size: 17px; border-radius: 12px; }
+  .pt-tools .cl-btn { padding: 7px 12px 9px; font-size: 13px; }
+  .pt-rango { width: clamp(84px, 13vw, 140px); }
+  .room-paint > .pt-rango { bottom: 10%; }
+  .pt-bubble { width: clamp(150px, 20vw, 220px); padding: 8px 10px; border-width: 3px; font-size: 12px; line-height: 1.6; }
+  .pt-bubble b { font-size: 11px; }
+}
+@media (max-height: 520px) and (orientation: landscape) and (max-width: 700px) {
+  .pt-bubble { width: 128px; font-size: 11px; bottom: 100%; }
+  .vt-paper textarea { height: 64px; min-height: 0; }
+}
+@media (max-height: 520px) and (orientation: landscape) {
+  .vt-paper textarea { height: 70px; min-height: 0; }
+  .vt-paper input, .vt-paper textarea { padding-top: 8px; padding-bottom: 8px; }
+}
+
+/* وقتی صفحه‌ی یک ساختمان باز است، پیام‌های بازی (توست) رویش دیده شوند ولی برچسبِ ساختمان‌ها نه */
+body:has(.interior.show) #overlay { z-index: 70; }
+body:has(.interior.show) #labels,
+body:has(.interior.show) #hud-topleft,
+body:has(.interior.show) #hud-topright,
+body:has(.interior.show) #hud-left,
+body:has(.interior.show) #hud-ctas { display: none; }

@@ -1,0 +1,814 @@
+{
+ "generatedAt": "2026-10-28T18:57:28.872Z",
+ "grades": {
+  "1": [
+   {
+    "id": "C1KrF1S1g1",
+    "file": "C1KrF1S1g1.html",
+    "title": "جزیره جادویی - ماجراجویی پیکسل",
+    "order": 1,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KoF1S1g1",
+    "file": "C1KoF1S1g1.html",
+    "title": "یادگیری سایه - حیاط مدرسه",
+    "order": 2,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KqF1S1g1",
+    "file": "C1KqF1S1g1.html",
+    "title": "نعمت‌یاب | LOKO System",
+    "order": 3,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KnF1S1g1",
+    "file": "C1KnF1S1g1.html",
+    "title": "کارخانه خط‌های صاف - LOKO",
+    "order": 4,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KrF1S1g2",
+    "file": "C1KrF1S1g2.html",
+    "title": "قطار اعداد فضایی",
+    "order": 5,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KoF1S1g2",
+    "file": "C1KoF1S1g2.html",
+    "title": "آزمایشگاه میوه‌ها - علوم کلاس اول",
+    "order": 6,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KqF1S1g2",
+    "file": "C1KqF1S1g2.html",
+    "title": "بازی بسم الله الرحمن الرحیم",
+    "order": 7,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KnF1S1g2",
+    "file": "C1KnF1S1g2.html",
+    "title": "نقاش کوچولو - LuKO",
+    "order": 8,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KrF1S1g3",
+    "file": "C1KrF1S1g3.html",
+    "title": "جزیره جادویی - ماجراجویی با پیکسل",
+    "order": 9,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KoF1S1g3",
+    "file": "C1KoF1S1g3.html",
+    "title": "کارخانه خوراکی‌ها - علوم پایه اول",
+    "order": 10,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KqF1S1g3",
+    "file": "C1KqF1S1g3.html",
+    "title": "سلام و علیکم - بازی آموزشی قرآن",
+    "order": 11,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KnF1S1g3",
+    "file": "C1KnF1S1g3.html",
+    "title": "ماجراجویی خط خمیده - LOKO Game",
+    "order": 12,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KrF1S1g4",
+    "file": "C1KrF1S1g4.html",
+    "title": "بازی هیولاهای گرسنه",
+    "order": 13,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KqF1S1g4",
+    "file": "C1KqF1S1g4.html",
+    "title": "بازی نقاشی بسم الله - LOKO System",
+    "order": 14,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KnF1S1g4",
+    "file": "C1KnF1S1g4.html",
+    "title": "قطار نگارش - LOKO Edition",
+    "order": 15,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KrF1S1G5",
+    "file": "C1KrF1S1G5.html",
+    "title": "نجات قبیله از خیلی",
+    "order": 16,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KrF1S1G6",
+    "file": "C1KrF1S1G6.html",
+    "title": "نجات قبیله از خیلی",
+    "order": 17,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KoF1S2g4",
+    "file": "C1KoF1S2g4.html",
+    "title": "آب‌بازی در آزمایشگاه | علوم پایه اول",
+    "order": 18,
+    "week": 2,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KnF1S2g5",
+    "file": "C1KnF1S2g5.html",
+    "title": "نقطه‌یاب | LOKO System",
+    "order": 19,
+    "week": 2,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KrF1S2g6",
+    "file": "C1KrF1S2g6.html",
+    "title": "سفر ریتم - LOKO UI",
+    "order": 20,
+    "week": 2,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KnF1S2g6",
+    "file": "C1KnF1S2g6.html",
+    "title": "معمای نگارش | مهارت‌های نوشتاری پایه اول",
+    "order": 21,
+    "week": 2,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KrF1S2g7",
+    "file": "C1KrF1S2g7.html",
+    "title": "خرگوش مهربان - LOKO UI",
+    "order": 22,
+    "week": 2,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KnF1S2g7",
+    "file": "C1KnF1S2g7.html",
+    "title": "نقاش کوچولو - LOKO",
+    "order": 23,
+    "week": 2,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KrF1S2g8",
+    "file": "C1KrF1S2g8.html",
+    "title": "آموزش اعداد فارسی 🌟",
+    "order": 24,
+    "week": 2,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KrF1S2g9",
+    "file": "C1KrF1S2g9.html",
+    "title": "🎮 بازی اعداد لوکو",
+    "order": 25,
+    "week": 2,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KrF1S2g10",
+    "file": "C1KrF1S2g10.html",
+    "title": "سفر ریاضی - LOKO System",
+    "order": 26,
+    "week": 2,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KnF2S1g1",
+    "file": "C1KnF2S1g1.html",
+    "title": "ماجراجویی کلمات | LOKO System",
+    "order": 27,
+    "week": 3,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KoF2S1g2",
+    "file": "C1KoF2S1g2.html",
+    "title": "شکارچی تصاویر",
+    "order": 28,
+    "week": 3,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KnF2S1g2",
+    "file": "C1KnF2S1g2.html",
+    "title": "ماجراهای حروف",
+    "order": 29,
+    "week": 3,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KnF2S1g3",
+    "file": "C1KnF2S1g3.html",
+    "title": "صداهای جادویی حروف | نگارش پایه اول",
+    "order": 30,
+    "week": 3,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KfF2S2g2",
+    "file": "C1KfF2S2g2.html",
+    "title": "پیدا کردن اشیا تو خونه‌ی لوکو! | فارسی اول",
+    "order": 31,
+    "week": 4,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KnF2S3G1",
+    "file": "C1KnF2S3G1.html",
+    "title": "شکارچی نشانه س | بازی تقویت توجه و تشخیص الگو",
+    "order": 32,
+    "week": 5,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KrF3S1g1",
+    "file": "C1KrF3S1g1.html",
+    "title": "مزرعه ریاضی - LOKO",
+    "order": 33,
+    "week": 6,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KoF3S1g1",
+    "file": "C1KoF3S1g1.html",
+    "title": "کارخانه خوراکی‌ها - علوم پایه اول",
+    "order": 34,
+    "week": 6,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KrF4S1G1",
+    "file": "C1KrF4S1G1.html",
+    "title": "گوشه‌یاب — ماجرای چوب کبریت",
+    "order": 35,
+    "week": 7,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KrF4S1G2",
+    "file": "C1KrF4S1G2.html",
+    "title": "سیب‌ستانِ الگوها | بازی سوم ریاضی پایه اول",
+    "order": 36,
+    "week": 7,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KrF4S1g4",
+    "file": "C1KrF4S1g4.html",
+    "title": "چوب‌کبریت‌های پیکسل | شمارش اضلاع",
+    "order": 37,
+    "week": 7,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KrF6S1g1",
+    "file": "C1KrF6S1g1.html",
+    "title": "ماجراجویی تفریق - LOKO",
+    "order": 38,
+    "week": 8,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KrF6S1g2",
+    "file": "C1KrF6S1g2.html",
+    "title": "بالون‌های پروازی | لوکو",
+    "order": 39,
+    "week": 8,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KrF8S1g1",
+    "file": "C1KrF8S1g1.html",
+    "title": "جنگل ریاضی - LOKO Edition",
+    "order": 40,
+    "week": 9,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C1KrF15S1g1",
+    "file": "C1KrF15S1g1.html",
+    "title": "تقسیم‌بندی قشنگ | ماجراجویی ریاضی",
+    "order": 41,
+    "week": 10,
+    "coinReward": 10,
+    "maxStars": 3
+   }
+  ],
+  "2": [
+   {
+    "id": "C2KrF1S1G1",
+    "file": "C2KrF1S1G1.html",
+    "title": "گل‌شمار — بازی ریاضی پایهٔ دوم",
+    "order": 1,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C2KhF1S1G1",
+    "file": "C2KhF1S1G1.html",
+    "title": "گنج آسمانی — کویز هدیه‌های آسمانی پایه دوم",
+    "order": 2,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C2KfF1S1G1",
+    "file": "C2KfF1S1G1.html",
+    "title": "بمب واژه‌ها",
+    "order": 3,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C2KrF1S1G2",
+    "file": "C2KrF1S1G2.html",
+    "title": "ساعت‌های گمشده در شهر",
+    "order": 4,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C2KrF1S1G3",
+    "file": "C2KrF1S1G3.html",
+    "title": "خط‌کش قبیله",
+    "order": 5,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C2KrF1S1G4",
+    "file": "C2KrF1S1G4.html",
+    "title": "سودوکوی قبیله‌ای",
+    "order": 6,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C2KrF1S1G5",
+    "file": "C2KrF1S1G5.html",
+    "title": "پُلِ اعداد",
+    "order": 7,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C2KrF1S1G6",
+    "file": "C2KrF1S1G6.html",
+    "title": "پل‌سازی اعداد",
+    "order": 8,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C2KrF1S1G7",
+    "file": "C2KrF1S1G7.html",
+    "title": "کارخانه اعداد",
+    "order": 9,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C2KrF1S1G8",
+    "file": "C2KrF1S1G8.html",
+    "title": "برج‌های لوکی — بازی شمارش | ریاضی دوم دبستان",
+    "order": 10,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C2KrF1S1G9",
+    "file": "C2KrF1S1G9.html",
+    "title": "میوه‌شمار | LOKO",
+    "order": 11,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C2KrF1S1G10",
+    "file": "C2KrF1S1G10.html",
+    "title": "نجات قبیله از خیلی",
+    "order": 12,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C2KrF1S1G11",
+    "file": "C2KrF1S1G11.html",
+    "title": "مرحله‌ی 13",
+    "order": 13,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C2KrF1S2G8",
+    "file": "C2KrF1S2G8.html",
+    "title": "حدس بزن کدوم گل بیشتره! | فارسی اول",
+    "order": 14,
+    "week": 2,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C2KoF3S3g8",
+    "file": "C2KoF3S3g8.html",
+    "title": "🌿 باغچه جادویی بامبو",
+    "order": 15,
+    "week": 3,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C2KnF6S1g1",
+    "file": "C2KnF6S1g1.html",
+    "title": "شکارچی نشانه س | بازی تقویت توجه و تشخیص الگو",
+    "order": 16,
+    "week": 4,
+    "coinReward": 10,
+    "maxStars": 3
+   }
+  ],
+  "3": [
+   {
+    "id": "C3KrF1S1G1",
+    "file": "C3KrF1S1G1.html",
+    "title": "ماشین آینده",
+    "order": 1,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C3KqF1S1G1",
+    "file": "C3KqF1S1G1.html",
+    "title": "کلمه‌های آسمانی",
+    "order": 2,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C3KrF1S1G2",
+    "file": "C3KrF1S1G2.html",
+    "title": "بازی ویروس الگو | کشف قانون سیستم",
+    "order": 3,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C3KrF1S1G3",
+    "file": "C3KrF1S1G3.html",
+    "title": "شهر زنده: معماری الگوها",
+    "order": 4,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C3KrF1S1G4",
+    "file": "C3KrF1S1G4.html",
+    "title": "طراح الگو: معلم کوچک",
+    "order": 5,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C3KrF1S1G5",
+    "file": "C3KrF1S1G5.html",
+    "title": "مغازه‌دار باهوش",
+    "order": 6,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C3KrF1S1G6",
+    "file": "C3KrF1S1G6.html",
+    "title": "ماشین پول‌سازی",
+    "order": 7,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C3KrF1S1G7",
+    "file": "C3KrF1S1G7.html",
+    "title": "الگوی ساختمان",
+    "order": 8,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C3KrF1S1G8",
+    "file": "C3KrF1S1G8.html",
+    "title": "مه‌تاب | بازی الگوی چرخهٔ ماه",
+    "order": 9,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C3KrF1S1G9",
+    "file": "C3KrF1S1G9.html",
+    "title": "ماجرای چوب‌کبریت | بازی الگوهای ریاضی",
+    "order": 10,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C3KrF1S1G10",
+    "file": "C3KrF1S1G10.html",
+    "title": "راز الگوها — بازی الگوهای عددی",
+    "order": 11,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C3KrF1S1G11",
+    "file": "C3KrF1S1G11.html",
+    "title": "شکارچی الگوها — بازی",
+    "order": 12,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C3KhF1S2G1",
+    "file": "C3KhF1S2G1.html",
+    "title": "قصّه‌خانه — مولا و مرد بی‌دست",
+    "order": 13,
+    "week": 2,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C3KrF1S2G6",
+    "file": "C3KrF1S2G6.html",
+    "title": "ماشین‌حساب جادویی",
+    "order": 14,
+    "week": 2,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C3KrF1S2G7",
+    "file": "C3KrF1S2G7.html",
+    "title": "لوکو و ماشین جادویی",
+    "order": 15,
+    "week": 2,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C3KrF1S2G8",
+    "file": "C3KrF1S2G8.html",
+    "title": "کارآگاه الگوها",
+    "order": 16,
+    "week": 2,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C3KrF1S3G13",
+    "file": "C3KrF1S3G13.html",
+    "title": "ماجرای تقارن | بازی آموزش تقارن",
+    "order": 17,
+    "week": 3,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C3KrF1S3G14",
+    "file": "C3KrF1S3G14.html",
+    "title": "دنیای تقارن | بازی رنگ‌آمیزی قرینه",
+    "order": 18,
+    "week": 3,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C3KrF1S5G1",
+    "file": "C3KrF1S5G1.html",
+    "title": "کاغذ جادویی - تقارن",
+    "order": 19,
+    "week": 4,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C3KrF1S5G2",
+    "file": "C3KrF1S5G2.html",
+    "title": "تقارن - آینه جادویی",
+    "order": 20,
+    "week": 4,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C3KrF1S14g1",
+    "file": "C3KrF1S14g1.html",
+    "title": "دسته‌دسته | بازی دسته‌بندی اشکال",
+    "order": 21,
+    "week": 5,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C3KfF2S1G1",
+    "file": "C3KfF2S1G1.html",
+    "title": "جاده‌ی واژه‌ها | مترادف یا متضاد؟",
+    "order": 22,
+    "week": 6,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C3KqF3S2G1",
+    "file": "C3KqF3S2G1.html",
+    "title": "پیام‌های آسمانی",
+    "order": 23,
+    "week": 7,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C3KqF3S2G2",
+    "file": "C3KqF3S2G2.html",
+    "title": "پیام‌های آسمانی",
+    "order": 24,
+    "week": 7,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C3KqF3S5G1",
+    "file": "C3KqF3S5G1.html",
+    "title": "پیام‌های آسمانی",
+    "order": 25,
+    "week": 8,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C3KqF3S11G1",
+    "file": "C3KqF3S11G1.html",
+    "title": "پیام‌های آسمانی",
+    "order": 26,
+    "week": 9,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C3KoF12S1G1",
+    "file": "C3KoF12S1G1.html",
+    "title": "مسابقه برج‌سازی تخم",
+    "order": 27,
+    "week": 10,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C3KoF12S1G2",
+    "file": "C3KoF12S1G2.html",
+    "title": "کاوشگر دنیای حشرات",
+    "order": 28,
+    "week": 10,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C3KoF12S1G3",
+    "file": "C3KoF12S1G3.html",
+    "title": "تخم‌های پر سروصدا | تصمیم با نمودار",
+    "order": 29,
+    "week": 10,
+    "coinReward": 10,
+    "maxStars": 3
+   }
+  ],
+  "4": [
+   {
+    "id": "C4KrF1S1G1",
+    "file": "C4KrF1S1G1.html",
+    "title": "شهر بامبوهای زنده",
+    "order": 1,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C4KnF1S1G2",
+    "file": "C4KnF1S1G2.html",
+    "title": "🏝️ جزیره کلمات",
+    "order": 2,
+    "week": 1,
+    "coinReward": 10,
+    "maxStars": 3
+   },
+   {
+    "id": "C4KfF1S2G1",
+    "file": "C4KfF1S2G1.html",
+    "title": "کارخانه‌ی صداها — درس دوم: بی‌آموز",
+    "order": 3,
+    "week": 2,
+    "coinReward": 10,
+    "maxStars": 3
+   }
+  ]
+ }
+}

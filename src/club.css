@@ -1,0 +1,198 @@
+/* ================= باشگاه لوکو ================= */
+#club { background: #233a63; }
+#club .cl-say { border-color: #f08a24; box-shadow: 0 6px 0 #b55f0c, 0 14px 26px rgba(0, 0, 0, .25); }
+#club .cl-title { color: #2f4f8c; }
+.cb-tag.board { bottom: auto; top: -56px; background: linear-gradient(#5a7cc4, #2f4f8c); box-shadow: 0 6px 0 #1d3160; }
+.cb-tag.mat { bottom: -36px; }
+.cb-tag.door { bottom: auto; top: 70px; background: linear-gradient(#5a7cc4, #2f4f8c); box-shadow: 0 6px 0 #1d3160; }
+.cb-spot[data-spot="mat"] { border-radius: 24px; }
+
+/* چابک روی ستاره‌ی وسطِ باشگاه */
+.cb-coach {
+  position: absolute;
+  left: 700px; top: 470px;
+  width: 230px;
+  cursor: pointer;
+  transform-origin: 50% 100%;
+  animation: cb-bounce 1.6s ease-in-out infinite;
+  filter: drop-shadow(0 16px 10px rgba(20, 40, 80, .35));
+}
+.cb-coach.hop { animation: dr-hop .6s cubic-bezier(.2, 1.6, .4, 1), cb-bounce 1.6s ease-in-out .6s infinite; }
+@keyframes cb-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px) scale(1.02, .98); } }
+#club:not([data-view="lobby"]) .cb-coach { pointer-events: none; }
+
+/* ===== تابلوی افتخار ===== */
+.room-board { background: rgba(20, 35, 70, .55); overflow-y: auto; }
+.cb-panel {
+  width: min(880px, calc(100% - 28px));
+  margin: 86px auto 30px;
+  display: grid; gap: 14px;
+  grid-template-columns: 1fr;
+}
+.cb-card {
+  padding: 16px 18px; border-radius: 24px;
+  background: linear-gradient(#2c3e66, #1f2d4d);
+  border: 4px solid #f08a24;
+  box-shadow: 0 7px 0 #b55f0c, 0 18px 30px rgba(0, 0, 0, .35);
+  color: #fff;
+  animation: cl-pop .45s cubic-bezier(.2, 1.6, .4, 1) both;
+}
+.cb-card h3 { font-size: 18px; font-weight: 900; margin-bottom: 10px; }
+.cb-card h3 small { opacity: .7; font-size: 13px; }
+.cb-streak, .cb-medals-card { grid-column: 1 / -1; }
+.cb-week { display: flex; gap: 8px; justify-content: space-between; }
+.cb-week span {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 8px 0; border-radius: 14px; background: rgba(255, 255, 255, .08);
+  font-size: 22px;
+}
+.cb-week span i { font-style: normal; font-size: 13px; font-weight: 900; opacity: .8; }
+.cb-week span.done { background: linear-gradient(#ffb54a, #f08a24); box-shadow: 0 4px 0 #b55f0c; }
+.cb-week span.today { outline: 3px solid #ffd66b; }
+.cb-missions { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.cb-missions li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 14px; background: rgba(255, 255, 255, .07); }
+.cb-missions li b { font-size: 24px; }
+.cb-missions li span { flex: 1; font-weight: 800; font-size: 14px; display: flex; flex-direction: column; }
+.cb-missions li small { opacity: .7; font-size: 12px; font-weight: 600; }
+.cb-missions li em { font-style: normal; font-weight: 900; color: #ffd66b; }
+.cb-missions li.done { background: rgba(88, 196, 112, .25); }
+.cb-missions li.done em { opacity: .5; text-decoration: line-through; }
+.cb-note { margin-top: 10px; font-size: 12.5px; opacity: .75; }
+.cb-medals { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; }
+.cb-medal { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 6px; border-radius: 16px; background: rgba(255, 255, 255, .06); text-align: center; filter: grayscale(1); opacity: .55; }
+.cb-medal.on { filter: none; opacity: 1; background: rgba(255, 255, 255, .12); }
+.cb-medal .disc { width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center; font-size: 26px; }
+.cb-medal.bronze .disc { background: radial-gradient(circle at 35% 30%, #ffd8b0, #c47a3a); box-shadow: 0 4px 0 #8a4f1e; }
+.cb-medal.silver .disc { background: radial-gradient(circle at 35% 30%, #fff, #a9b4c6); box-shadow: 0 4px 0 #6b7689; }
+.cb-medal.gold .disc { background: radial-gradient(circle at 35% 30%, #fff3b8, #e8a31c); box-shadow: 0 4px 0 #a8701c; }
+.cb-medal.on .disc { animation: cb-shine 2.4s ease-in-out infinite; }
+@keyframes cb-shine { 50% { transform: rotate(-8deg) scale(1.06); } }
+.cb-medal b { font-size: 12.5px; font-weight: 900; }
+.cb-medal small { font-size: 11px; opacity: .8; }
+.cb-medal .bar { display: block; width: 80%; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, .15); overflow: hidden; }
+.cb-medal .bar i { display: block; height: 100%; background: #ffd66b; }
+
+/* ===== تشک: تمرین ===== */
+.room-mat { background: radial-gradient(ellipse at 30% 60%, rgba(255, 255, 255, .25), transparent 60%), rgba(25, 45, 90, .6); }
+.cb-mat { position: absolute; inset: 80px 16px 16px; display: flex; gap: 20px; align-items: center; justify-content: center; }
+.cb-coachbox {
+  flex: 0 0 min(36%, 360px); align-self: stretch;
+  display: flex; align-items: flex-end; justify-content: center;
+  border-radius: 30px;
+  background: radial-gradient(ellipse 55% 9% at 50% 95%, rgba(20, 40, 90, .55), transparent 70%), radial-gradient(circle at 50% 45%, rgba(255, 180, 80, .35), transparent 60%);
+}
+.cb-big { max-height: 92%; max-width: 100%; transform-origin: 50% 100%; filter: drop-shadow(0 14px 12px rgba(0, 0, 0, .35)); animation: cb-bounce 1.6s ease-in-out infinite; }
+.cb-big.m-run { animation: cb-run .32s ease-in-out infinite; }
+.cb-big.m-jump { animation: cb-jump .9s cubic-bezier(.3, 0, .3, 1) infinite; }
+.cb-big.m-squat { animation: cb-squat 3s ease-in-out infinite; }
+.cb-big.m-stretch { animation: cb-stretch 4s ease-in-out infinite; }
+.cb-big.m-win { animation: dr-hop .7s cubic-bezier(.2, 1.6, .4, 1) 3; }
+@keyframes cb-run { 0%, 100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-14px) rotate(3deg); } }
+@keyframes cb-jump { 0%, 100% { transform: translateY(0) scale(1.06, .94); } 45% { transform: translateY(-60px) scale(.96, 1.06); } }
+@keyframes cb-squat { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1, .78); } }
+@keyframes cb-stretch { 0%, 100% { transform: rotate(0) scaleY(1); } 25% { transform: rotate(-8deg) scaleY(1.06); } 75% { transform: rotate(8deg) scaleY(1.06); } }
+.cb-side { flex: 1; max-width: 520px; display: flex; flex-direction: column; gap: 12px; }
+.cb-bubble {
+  padding: 14px 18px; border-radius: 22px;
+  background: #fff; color: #24324a;
+  border: 4px solid #f08a24; box-shadow: 0 6px 0 #b55f0c;
+  animation: cl-pop .45s cubic-bezier(.2, 1.6, .4, 1);
+}
+.cb-bubble b { color: #b55f0c; font-size: 13px; }
+.cb-bubble p { font-size: 16px; font-weight: 800; line-height: 1.8; }
+.cb-tasks { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.cb-task {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 12px 8px; border-radius: 20px;
+  background: linear-gradient(#fff, #eef3fb) !important;
+  color: #24324a !important;
+  box-shadow: 0 6px 0 #b9c7de, 0 10px 18px rgba(0, 0, 0, .2);
+  text-align: center;
+  animation: cl-pop .45s cubic-bezier(.2, 1.6, .4, 1) both;
+  transition: transform .12s;
+}
+.cb-task:active { transform: translateY(5px); box-shadow: 0 1px 0 #b9c7de; }
+.cb-task b { font-size: 34px; }
+.cb-task span { font-weight: 900; font-size: 14px; display: flex; flex-direction: column; }
+.cb-task small { font-weight: 600; opacity: .7; font-size: 12px; }
+.cb-task em { font-style: normal; font-weight: 900; color: #b55f0c; font-size: 13px; }
+.cb-task.done { background: linear-gradient(#ecfbef, #d8f3de) !important; box-shadow: 0 6px 0 #9bd4a8; }
+.cb-task.done em { color: #2e8b46; }
+
+.cb-session {
+  padding: 20px; border-radius: 26px; text-align: center;
+  background: #fff; color: #24324a;
+  box-shadow: 0 7px 0 #b9c7de, 0 18px 30px rgba(0, 0, 0, .25);
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  animation: cl-pop .45s cubic-bezier(.2, 1.6, .4, 1);
+}
+.cb-session h3 { font-size: 20px; font-weight: 900; }
+.cb-ring { width: 150px; height: 150px; border-radius: 50%; background: conic-gradient(#f08a24 calc(var(--p) * 360deg), #e3e9f4 0); display: grid; place-items: center; }
+.cb-ring > div { width: 118px; height: 118px; border-radius: 50%; background: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.cb-ring b { font-size: 40px; font-weight: 900; color: #2f4f8c; line-height: 1.1; }
+.cb-ring small { font-weight: 800; opacity: .7; }
+.cb-reps { font-weight: 900; font-size: 18px; }
+.cb-reps b { color: #f08a24; font-size: 24px; }
+.cb-cue { font-weight: 800; font-size: 16px; color: #2f4f8c; animation: cl-bob2 1.6s ease-in-out infinite; }
+.cb-paused { display: none; font-weight: 800; color: #b55f0c; }
+.cb-session.paused .cb-paused { display: block; }
+.cb-session.done h3 { font-size: 26px; }
+.cb-win { font-size: 20px; font-weight: 900 !important; color: #b55f0c; }
+.cb-session .vt-row { justify-content: center; }
+
+@media (max-width: 760px) and (orientation: portrait) {
+  .cb-panel { grid-template-columns: 1fr; margin-top: 76px; }
+  .cb-mat { flex-direction: column; inset: 72px 10px 10px; gap: 10px; }
+  .cb-coachbox { flex: 0 0 30%; width: 100%; }
+  .cb-bubble p { font-size: 14px; }
+  .cb-task b { font-size: 26px; }
+  .cb-ring { width: 120px; height: 120px; }
+  .cb-ring > div { width: 94px; height: 94px; }
+}
+
+/* گوشیِ افقی: تابلوی افتخار دوستونه و فشرده؛ روی تشک چابک کنارِ تمرین‌ها */
+@media (max-height: 520px) and (orientation: landscape) {
+  .cb-panel { width: min(880px, calc(100% - 20px)); margin: 62px auto 16px; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .cb-card { padding: 10px 12px; border-radius: 18px; border-width: 3px; box-shadow: 0 5px 0 #b55f0c, 0 12px 20px rgba(0, 0, 0, .3); }
+  .cb-card h3 { font-size: 15px; margin-bottom: 6px; }
+  .cb-streak { grid-column: auto; }
+  .cb-week { gap: 5px; }
+  .cb-week span { padding: 4px 0; font-size: 17px; border-radius: 10px; }
+  .cb-week span i { font-size: 11px; }
+  .cb-missions { gap: 5px; }
+  .cb-missions li { padding: 5px 8px; gap: 8px; }
+  .cb-missions li b { font-size: 18px; }
+  .cb-missions li span { font-size: 12.5px; }
+  .cb-note { font-size: 11.5px; margin-top: 6px; }
+  .cb-medals { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; }
+  .cb-medal { padding: 6px 4px; }
+  .cb-medal .disc { width: 40px; height: 40px; font-size: 20px; }
+  .cb-medal b { font-size: 11px; }
+  .cb-medal small { font-size: 10px; }
+
+  .cb-mat { inset: 62px max(12px, env(safe-area-inset-right)) 10px max(12px, env(safe-area-inset-left)); gap: 12px; }
+  .cb-side { gap: 8px; max-height: 100%; overflow-y: auto; padding: 4px 2px 8px; }
+  .cb-coachbox { flex-basis: min(28%, 300px); }
+  .cb-bubble { padding: 8px 12px; border-radius: 16px; border-width: 3px; }
+  .cb-bubble b { font-size: 11px; }
+  .cb-bubble p { font-size: 13px; line-height: 1.6; }
+  .cb-tasks { gap: 8px; }
+  .cb-task { padding: 6px; border-radius: 14px; gap: 2px; }
+  .cb-task b { font-size: 24px; }
+  .cb-task span { font-size: 12px; }
+  .cb-task small { font-size: 10.5px; }
+  .cb-task em { font-size: 11.5px; }
+  .cb-session { padding: 10px 14px; gap: 4px; border-radius: 20px; }
+  .cb-session h3 { font-size: 16px; }
+  .cb-session.done h3 { font-size: 20px; }
+  .cb-ring { width: 96px; height: 96px; }
+  .cb-ring > div { width: 76px; height: 76px; }
+  .cb-ring b { font-size: 28px; }
+  .cb-reps { font-size: 14px; }
+  .cb-reps b { font-size: 18px; }
+  .cb-cue { font-size: 13px; }
+  .cb-win { font-size: 16px; }
+}
+@media (max-height: 520px) and (orientation: landscape) and (min-width: 700px) {
+  .cb-tasks { grid-template-columns: repeat(4, 1fr); }
+}
