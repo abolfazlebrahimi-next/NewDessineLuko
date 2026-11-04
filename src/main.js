@@ -1,5 +1,6 @@
 // ================= شهر لوکو — نقطه‌ی شروع =================
-import * as THREE from 'three';
+// هیچ WebGL‌ای این‌جا بالا نمی‌آید: شهر با تصویرهای از پیش پخته‌شده روی canvas
+// کشیده می‌شود، پس روی گوشی و دستگاهِ بی‌کارت‌گرافیک هم صفحه سفید نمی‌ماند.
 import { World } from './world.js';
 import { UI } from './ui.js';
 import { City } from './city.js';
@@ -83,8 +84,8 @@ let pinching = false;
 let pinch = null;     // { d, zoom }
 let lastHoverTag = null;
 
-function setHover(mesh) {
-  const tag = mesh && mesh.userData && mesh.userData.type === 'building' ? mesh.userData.id : null;
+function setHover(item) {
+  const tag = item && item.tag ? item.tag : null;
   if (tag === lastHoverTag) return;
   if (lastHoverTag) world.hoverSprite(lastHoverTag, false);
   lastHoverTag = tag;
@@ -153,16 +154,13 @@ const finishPointer = (e) => {
     const isClick = !down.moved && (performance.now() - down.time) < 600;
     const mesh = down.mesh;
     down = null;
-    if (isClick && mesh && mesh.userData.type === 'building') {
-      const id = mesh.userData.id.slice(9); // 'building:' = 9 حرف
+    if (isClick && mesh && mesh.tag && mesh.tag.startsWith('building:')) {
+      const id = mesh.tag.slice(9); // 'building:' = 9 حرف
       const b = LAYOUT.buildings.find(x => x.id === id);
       if (b) {
         sfx.click();
-        const wp = new THREE.Vector3();
-        // مرکز کفِ ساختمان (سایه‌ی تماس) — خود اسپریت کمی جلوتر لنگر دارد
-        if (mesh.userData.shadow) mesh.userData.shadow.getWorldPosition(wp);
-        else mesh.getWorldPosition(wp); // شهر ۴۵ درجه چرخیده
-        world.focusOn(wp.x, wp.z + 1.6, 1.05);
+        // روی زمین: مرکزِ کفِ ساختمان
+        world.focusOn(mesh.pos.x, mesh.pos.z + 1.2, 1.05);
         ui.openBuilding(b);
       }
     }

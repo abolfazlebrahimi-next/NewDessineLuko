@@ -13,6 +13,9 @@ import { openClub } from './club.js';
 import { openBoard } from './board.js';
 import { openCouncil, openHome } from './rooms.js';
 
+// چیزِ انتخاب‌شده روی بوم می‌تواند اسپریتِ ساختمان یا یک بازیگر باشد
+const isBuilding = (it) => !!(it && it.tag && String(it.tag).startsWith('building:'));
+
 const fmt = (n) => Math.round(n).toLocaleString('fa-IR');
 // در حالت تست، موجودی بی‌نهایت نمایش داده می‌شود
 const fmtMoney = (currency) => TEST_MODE.infiniteMoney
@@ -548,8 +551,8 @@ export class UI {
   // هدف کارت در یک نقطه‌ی صفحه (مشترک بین درگ و ضربه روی زمین)
   computeDropTarget(itemId, px, py) {
     const mesh = this.world.pick(px, py);
-    if (mesh && mesh.userData.type === 'plot' && !isGroundItem(itemId)) {
-      return { target: { plotId: mesh.userData.id.slice(5), point: null }, ok: true, mesh, ground: null };
+    if (mesh && mesh.kind === 'plot' && !isGroundItem(itemId)) {
+      return { target: { plotId: mesh.plotId, point: null }, ok: true, mesh, ground: null };
     }
     const ground = this.world.pickGround(px, py);
     if (isGroundItem(itemId) && ground) {
@@ -562,7 +565,7 @@ export class UI {
   _updateDragGhost(itemId, px, py) {
     const r = this.computeDropTarget(itemId, px, py);
     if (r.target && r.target.plotId && r.mesh) {
-      this.world.showPlacementGhost(r.mesh.position.x, r.mesh.position.z, 2.4, true);
+      this.world.showPlacementGhost(r.mesh.pos.x, r.mesh.pos.z, 2.4, true);
     } else if (r.target && r.ground) {
       // سبز = جای مجاز، قرمز = جای نامجاز
       this.world.showPlacementGhost(r.ground.x, r.ground.z, ITEMS[itemId].ghost || 2.2, r.ok);
@@ -608,7 +611,7 @@ export class UI {
     if (!itemId) return false;
     const r = this.computeDropTarget(itemId, clientX, clientY);
     if (!r.target) {
-      if (r.mesh && r.mesh.userData.type === 'building') {
+      if (r.mesh && isBuilding(r.mesh)) {
         this.toast('این کارت روی ساختمان کار نمی‌کند؛ روی زمین بزن.');
       } else {
         this.toast(isGroundItem(itemId) ? 'روی زمین خالی بزن تا گذاشته شود.' : 'روی یک جایگاه کشت بزن.');
@@ -675,7 +678,7 @@ export class UI {
       this.world.hidePlacementGhost();
       this.dropTarget = null;
       if (!r.target) {
-        if (r.mesh && r.mesh.userData.type === 'building') {
+        if (r.mesh && isBuilding(r.mesh)) {
           this.toast('این کارت روی ساختمان کار نمی‌کند؛ روی مزرعه بینداز.');
         } else {
           this.toast('اینجا نمی‌توانی بیندازی؛ روی جایگاه کشت بینداز.');

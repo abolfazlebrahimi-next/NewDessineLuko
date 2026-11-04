@@ -1,5 +1,7 @@
 // تست بوت کامل برنامه با استاب WebGL/2D — شبیه‌سازی کلیک واقعی
 import { JSDOM } from 'jsdom';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const html = `
 <!DOCTYPE html>
@@ -158,6 +160,25 @@ try { Object.defineProperty(window, 'performance', { value: perfStub, configurab
 global.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 16);
 global.cancelAnimationFrame = (id) => clearTimeout(id);
 global.Image = window.Image;
+// ---- استاب fetch: فایل‌های public را از دیسک می‌خواند (اتلس/units.json) ----
+// شبیه‌سازیِ شبکه در jsdom به undici می‌خورد و markResourceTiming ندارد؛ پس
+// همه‌ی درخواست‌ها مستقیم از پوشه‌ی public سرو می‌شوند.
+global.fetch = async (url) => {
+  const u = new URL(String(url), 'http://localhost/');
+  const file = join('public', u.pathname.replace(/^\/+/, ''));
+  try {
+    const buf = readFileSync(file);
+    return {
+      ok: true, status: 200,
+      json: async () => JSON.parse(buf.toString()),
+      text: async () => buf.toString(),
+      arrayBuffer: async () => buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength),
+    };
+  } catch (e) {
+    return { ok: false, status: 404, json: async () => ({}), text: async () => '', arrayBuffer: async () => new ArrayBuffer(0) };
+  }
+};
+window.fetch = global.fetch;
 global.Event = window.Event;
 global.PointerEvent = window.MouseEvent; // jsdom PointerEvent ندارد
 window.matchMedia = () => ({ matches: false, addListener() {}, removeListener() {} });

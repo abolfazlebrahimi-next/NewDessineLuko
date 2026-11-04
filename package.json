@@ -9,7 +9,10 @@
     "preview": "vite preview",
     "test": "node tests/test-game.mjs && node tests/test-sync.mjs && node tests/test-build.mjs && node tests/test-game-path.mjs && node tests/test-ui.mjs && node tests/test-boot.mjs && node tests/test-structures.mjs && node scripts/verify-models.mjs && node scripts/sim-traffic.mjs",
     "build:single": "vite build --config vite.config.single.mjs && node scripts/make-single.mjs && node scripts/verify-single.mjs && node scripts/verify-models.mjs",
-    "games:path": "node scripts/build-game-path.mjs"
+    "games:path": "node scripts/build-game-path.mjs",
+    "bake": "node scripts/bake-sprites.mjs",
+    "bake:high": "QUALITY=high node scripts/bake-sprites.mjs",
+    "preview:2d": "node scripts/preview-world.mjs"
   },
   "repository": {
     "type": "git",

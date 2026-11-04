@@ -1,550 +1,598 @@
-// ================= جهان بازی با Three.js =================
-import * as THREE from 'three';
+// ================= جهانِ بازی روی canvas دو‌بعدی =================
+// این فایل همان کاری را می‌کند که نسخه‌ی سه‌بعدی می‌کرد (دوربین، پن/زوم، انتخاب،
+// برچسب‌ها)، ولی بدونِ WebGL: هر فریم یک تصویرِ زمین + چند هزار drawImage از
+// اتلسِ اسپریت‌ها. همان‌جا که نسخه‌ی قبلی mesh و متریال می‌ساخت، این‌جا فقط شماره‌ی
+// قابِ پخته‌شده جابه‌جا می‌شود.
+import {
+  VIEW_HEIGHT, CAM_UP, CAM_RIGHT, ZOOM_MIN, ZOOM_MAX, project, depthOf, cityToWorld,
+} from './cam.js';
 import { ASSET, AREAS, MAP_BOUNDS } from './config.js';
-import { sharedManager } from './loader.js';
+import { loadAtlas, atlas, View, frameIndexFor } from './scene2d.js';
 
-const VIEW_HEIGHT = 18.5;      // ارتفاع دید ارتوگرافیک
-const CAM_POS = new THREE.Vector3(0, 13.5, 11.8);
-const CAM_TARGET = new THREE.Vector3(0, 0, 0);
-// زوم متعادل: نه خیلی نزدیک، نه خیلی دور — همیشه بشود مدیریت کرد
-const ZOOM_MIN = 0.44;
-const ZOOM_MAX = 1.6;
-// زاویه‌ی دوربین نسبت به زمین (برای نشاندن اسپریت‌های ایزومتریک روی زمین لازم است)
-const CAM_PITCH_SIN = CAM_POS.y / Math.hypot(CAM_POS.y, CAM_POS.z);
+// لایه‌ها: عددِ کمتر = پایین‌تر
+const LAYER = { GROUND: 0, SHADOW: 1, STATIC: 2, ACTOR: 3, SPRITE: 4, EFFECT: 5 };
 
 export class World {
   constructor(canvas) {
     this.canvas = canvas;
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    const isTouch = 'ontouchstart' in window || (window.matchMedia && matchMedia('(pointer: coarse)').matches);
-    // گوشیِ کم‌حافظه (۲ گیگ یا کمتر؛ کروم اندروید گزارش می‌دهد) با وضوحِ کمی پایین‌تر رندر می‌کند تا بالا بیاید
-    const lowMem = navigator.deviceMemory && navigator.deviceMemory <= 2;
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, lowMem ? 1.25 : isTouch ? 1.6 : 2));
-    this.renderer.setClearColor(0x7ec850, 1);
+    this.ctx = canvas.getContext('2d', { alpha: false });
+    this.view = new View();
+    this.isTouch = 'ontouchstart' in window || (window.matchMedia && matchMedia('(pointer: coarse)').matches);
+    this.lowMem = !!(navigator.deviceMemory && navigator.deviceMemory <= 4);
 
-    this.scene = new THREE.Scene();
-    // نور — برای مدل‌های سه‌بعدی (درخت/سنگ/آدمک) لازم است؛ اسپریت‌ها بی‌نیازند
-    this.scene.add(new THREE.HemisphereLight(0xeaf6ff, 0x4a7a34, 1.9));
-    const sun = new THREE.DirectionalLight(0xfff2d8, 1.6);
-    sun.position.set(6, 14, 7);
-    this.scene.add(sun);
-
-    this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 320);
-    this.camera.position.copy(CAM_POS);
-    this.camera.lookAt(CAM_TARGET);
-
-    // مه‌ی ملایم هم‌رنگ چمن: افق و لبه‌ی دور شهر در سبزی محو می‌شود تا
-    // نقشه «بی‌پایان» به نظر برسد — بازه ملایم‌تر تا ساختمان‌ها موقع اسکرول
-    // نصفه یا کامل محو نشوند (اسپریت ساختمان‌ها اصلاً مه نمی‌گیرند)
-    this.scene.fog = new THREE.Fog(0x7ec850, 45, 100);
-
-    this.loader = new THREE.TextureLoader(sharedManager);
-    this.texCache = new Map();
-    this.clickables = [];        // برای ری‌کست
-    this.byTag = new Map();      // tag -> mesh
-    this.effects = [];           // انیمیشن‌های فعال
-    this.panTarget = new THREE.Vector3().copy(CAM_TARGET);
+    // ---------- وضعیتِ دوربین ----------
     this.zoom = 1;
-    this.area = AREAS.town;      // صحنه‌ی فعلی: شهر یا مزرعه
-    this.pitchSin = CAM_PITCH_SIN;
+    this.panTarget = { x: 0, z: 0 };
+    this.area = AREAS.town;
+    this.pitchSin = -CAM_UP.z;
 
-    this._makeGround();
-    this._makeShadowTexture();
-    this._makeRingTexture();
-    this._makeGhostTexture();
-    this._makeParticleTexture();
+    // ---------- اشیای نمایشی ----------
+    this.staticItems = [];        // نمونه‌های ثابتِ پخته‌شده (از city)
+    this.staticActors = [];       // ماشین‌های پارک‌شده و چیزهای ثابتِ غیرِ نقشه
+    this.dynamic = [];            // متحرک‌ها (ماشین/آدمک/اسکیت‌سوار)
+    this.sprites = [];            // ساختمان‌های اصلی (تصویرهای ایزومتریک)
+    this.byTag = new Map();
+    this.clickables = [];
+    this.effects = [];
+    this.labels = [];
+    this._staticDirty = true;
+    this._sortedStatic = [];
+    this._sortedKey = '';
+    this.renderCount = 0;
 
-    this.raycaster = new THREE.Raycaster();
-    this.pointerNdc = new THREE.Vector2();
+    this._makeTextures();
+    this._resize();
+    window.addEventListener('resize', () => this._resize());
+    if (window.visualViewport) visualViewport.addEventListener('resize', () => this._resize());
 
-    window.addEventListener('resize', () => this.resize());
-    if (window.visualViewport) visualViewport.addEventListener('resize', () => this.resize());
-    this.resize();
+    this.atlasReady = loadAtlas();
+    this.atlasReady.then(() => { this._staticDirty = true; });
+    this.view.set(this.panTarget, this.zoom);
+    this.view.update();
   }
 
-  // ---------- بافت‌ها ----------
-  texture(file) {
-    if (!this.texCache.has(file)) {
-      const t = this.loader.load(ASSET(file));
-      t.colorSpace = THREE.SRGBColorSpace;
-      this.texCache.set(file, t);
+  markStaticDirty() { this._staticDirty = true; }
+
+  // ---------- بافت‌های کوچکِ ساخته‌شده در مرورگر (سایه/حلقه/پد) ----------
+  _makeTextures() {
+    this.shadowTex = makeBlob(128, [
+      [0, 'rgba(20,50,15,0.42)'], [0.62, 'rgba(20,50,15,0.2)'], [1, 'rgba(20,50,15,0)'],
+    ]);
+    this.ringTex = makeRing('#5adc6e');
+    this.ghostTex = makeBlob(128, [
+      [0, 'rgba(255,255,255,0.62)'], [0.75, 'rgba(255,255,255,0.28)'], [1, 'rgba(255,255,255,0)'],
+    ], true);
+  }
+
+  _resize() {
+    const cssW = this.canvas.clientWidth || window.innerWidth;
+    const cssH = this.canvas.clientHeight || window.innerHeight;
+    // وضوح: روی گوشی و دستگاهِ کم‌حافظه پایین‌تر تا حافظه/پردازنده کم نیاورد
+    const cap = this.lowMem ? 1.5 : this.isTouch ? 2 : 2;
+    const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, cap));
+    const w = Math.round(cssW * dpr), h = Math.round(cssH * dpr);
+    if (this.canvas.width !== w || this.canvas.height !== h) {
+      this.canvas.width = w;
+      this.canvas.height = h;
     }
-    return this.texCache.get(file);
+    this.view.resize(cssW, cssH, dpr);
+    this.view.set(this.panTarget, this.zoom);
+    this.view.update();
+    this.cssW = cssW;
+    this.cssH = cssH;
+    this.ctx.imageSmoothingEnabled = true;
+    this.ctx.imageSmoothingQuality = 'low';
   }
 
-  // بافت را کامل لود می‌کند (برای ساختمان‌های اصلی: تا عکس نیامده اسپریت ساخته نمی‌شود
-  // که با نسبت ابعاد غلط «پرش» نکند)
-  loadTexture(file) {
-    return new Promise((resolve) => {
-      let done = false;
-      const finish = (t) => { if (!done) { done = true; resolve(t); } };
-      const t = this.loader.load(ASSET(file), () => finish(t), undefined, () => finish(t));
-      t.colorSpace = THREE.SRGBColorSpace;
-      this.texCache.set(file, t);
-      setTimeout(() => finish(t), 8000);
-    });
+  // ---------- APIِ سازگار با بقیه‌ی بازی ----------
+  addSprite({ tag, file, texture = null, x, z, width, y = 0, clickable = true, anchorBottom = true, shadow = null }) {
+    const img = (texture && texture.image) || null;
+    const item = {
+      tag, file, img,
+      pos: { x, y, z },
+      anchorBottom,
+      width,
+      aspect: img && img.width ? img.width / img.height : 1.5,
+      scale: 1,
+      clickable,
+      shadowSpec: shadow,
+      isMainBuilding: true,
+      depth: depthOf(x, y, z),
+    };
+    if (!img) this.texture(file, item);
+    this.sprites.push(item);
+    if (clickable) this.clickables.push(item);
+    this.byTag.set(tag, item);
+    this._staticDirty = true;
+    return item;
   }
 
-  _makeGround() {
-    const grass = this.loader.load(ASSET('grass_tile.webp'));
-    grass.wrapS = grass.wrapT = THREE.RepeatWrapping;
-    grass.repeat.set(30, 30);
-    grass.colorSpace = THREE.SRGBColorSpace;
-    const mat = new THREE.MeshBasicMaterial({ map: grass });
-    // زمین بزرگ چمنی که شهر رویش ساخته می‌شود
-    this.ground = new THREE.Mesh(new THREE.PlaneGeometry(430, 430), mat);
-    this.ground.rotation.x = -Math.PI / 2;
-    this.ground.position.set(0, 0, 0);
-    this.ground.renderOrder = -1000;
-    this.scene.add(this.ground);
-
-    // لکه‌های روشن‌تر چمن زیر ساختمان‌ها برای عمق بیشتر
-    const patchCanvas = document.createElement('canvas');
-    patchCanvas.width = patchCanvas.height = 256;
-    const pctx = patchCanvas.getContext('2d');
-    const g = pctx.createRadialGradient(128, 128, 20, 128, 128, 128);
-    g.addColorStop(0, 'rgba(255,255,255,0.20)');
-    g.addColorStop(1, 'rgba(255,255,255,0)');
-    pctx.fillStyle = g;
-    pctx.fillRect(0, 0, 256, 256);
-    const patchTex = new THREE.CanvasTexture(patchCanvas);
-    this.patchMat = new THREE.MeshBasicMaterial({
-      map: patchTex, transparent: true, depthWrite: false,
-    });
-    // (شهر خودش کف‌پوش و خیابان دارد)
-  }
-
-  _makeShadowTexture() {
-    const c = document.createElement('canvas');
-    c.width = c.height = 128;
-    const ctx = c.getContext('2d');
-    const g = ctx.createRadialGradient(64, 64, 6, 64, 64, 62);
-    g.addColorStop(0, 'rgba(20,50,15,0.38)');
-    g.addColorStop(0.65, 'rgba(20,50,15,0.20)');
-    g.addColorStop(1, 'rgba(20,50,15,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, 128, 128);
-    this.shadowTex = new THREE.CanvasTexture(c);
-  }
-
-  _makeRingTexture() {
-    const c = document.createElement('canvas');
-    c.width = c.height = 128;
-    const ctx = c.getContext('2d');
-    ctx.strokeStyle = 'rgba(90,220,110,0.95)';
-    ctx.lineWidth = 10;
-    ctx.beginPath();
-    ctx.arc(64, 64, 52, 0, Math.PI * 2);
-    ctx.stroke();
-    this.ringTex = new THREE.CanvasTexture(c);
-  }
-
-  _makeGhostTexture() {
-    // سایه/پد جانمایی مربعی گرد مثل کلش
-    const c = document.createElement('canvas');
-    c.width = c.height = 128;
-    const ctx = c.getContext('2d');
-    const g = ctx.createRadialGradient(64, 64, 8, 64, 64, 60);
-    g.addColorStop(0, 'rgba(255,255,255,0.55)');
-    g.addColorStop(0.75, 'rgba(255,255,255,0.28)');
-    g.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, 128, 128);
-    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-    ctx.lineWidth = 6;
-    ctx.beginPath();
-    ctx.arc(64, 64, 54, 0, Math.PI * 2);
-    ctx.stroke();
-    this.ghostTex = new THREE.CanvasTexture(c);
-  }
-
-  _makeParticleTexture() {
-    const c = document.createElement('canvas');
-    c.width = c.height = 64;
-    const ctx = c.getContext('2d');
-    const g = ctx.createRadialGradient(32, 32, 2, 32, 32, 30);
-    g.addColorStop(0, 'rgba(255,255,255,1)');
-    g.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, 64, 64);
-    this.particleTex = new THREE.CanvasTexture(c);
-  }
-
-  // ---------- ساخت اشیاء ----------
-  /**
-   * اسپریت ایستاده روی زمین (ساختمان/درخت/جایگاه)
-   */
-  addSprite({ tag, file, texture = null, x, z, width, y = 0, clickable = true, anchorBottom = true, depthTest = false, shadow = null }) {
-    const tex = texture || this.texture(file);
-    const mat = new THREE.SpriteMaterial({
-      map: tex, transparent: true, depthTest, depthWrite: false,
-      alphaTest: 0.02,
-      fog: false,   // ساختمان‌های اصلی موقع پن/اسکرول محو نمی‌شوند
-    });
-    const sp = new THREE.Sprite(mat);
-    const aspect = tex.image && tex.image.width ? tex.image.width / tex.image.height : 1.5;
-    // اگر عکس هنوز لود نشده، وقتی آمد نسبت ابعاد واقعی را اعمال کن
-    if (tex.image && !tex.image.width && tex.image.addEventListener) {
-      tex.image.addEventListener('load', () => {
-        const a = tex.image.width / tex.image.height;
-        sp.scale.y = sp.scale.x / a;
-        sp.userData.aspect = a;
-        sp.userData.baseScale.copy(sp.scale);
-      }, { once: true });
+  /** تصویرِ یک ساختمان اصلی: کشِ سراسری + بارگذاریِ تنبل */
+  texture(file, target = null) {
+    this._texImages = this._texImages || new Map();
+    let ent = this._texImages.get(file);
+    if (!ent) {
+      ent = { img: null, waiting: [], w: 0, h: 0 };
+      this._texImages.set(file, ent);
+      const img = new Image();
+      img.decoding = 'async';
+      img.onload = () => {
+        ent.img = img;
+        ent.w = img.naturalWidth || img.width || 1;
+        ent.h = img.naturalHeight || img.height || 1;
+        for (const w of ent.waiting) w();
+        ent.waiting.length = 0;
+        this._staticDirty = true;
+      };
+      img.src = ASSET(file);
     }
-    const h = width / aspect;
-    sp.scale.set(width, h, 1);
-    sp.center.set(0.5, anchorBottom ? 0 : 0.5);
-    sp.position.set(x, y, z);
-    sp.renderOrder = 1000 + z * 10;
-    sp.userData = { tag, type: tag.split(':')[0], id: tag, baseScale: sp.scale.clone(), aspect };
-    this.scene.add(sp);
-    if (clickable) this.clickables.push(sp);
-    this.byTag.set(tag, sp);
-
-    // سایه‌ی تماس: دقیقاً زیر کفِ ساختمان (نه جلوی آن) تا روی زمین «بنشیند»
-    const sh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({
-      map: this.shadowTex, transparent: true, depthWrite: false, depthTest: false,
-      fog: false,   // سایه‌ی ساختمان هم مثل خودش مه نمی‌گیرد
-      opacity: shadow && shadow.opacity != null ? shadow.opacity : 1,
-    }));
-    sh.rotation.x = -Math.PI / 2;
-    if (shadow) {
-      sh.scale.set(shadow.w, shadow.d, 1);
-      sh.position.set(shadow.x ?? x, 0.03, shadow.z ?? z);
-    } else {
-      sh.scale.set(width * 0.85, width * 0.38, 1);
-      sh.position.set(x, 0.03, z + width * 0.12);
+    const apply = (t) => { t.img = ent.img; t.aspect = ent.w / Math.max(1, ent.h); };
+    if (target) {
+      if (ent.img) apply(target);
+      else ent.waiting.push(() => apply(target));
     }
-    sh.renderOrder = 990 + z * 10;
-    this.scene.add(sh);
-    sp.userData.shadow = sh;
-    return sp;
+    return { image: ent.img };
   }
+
+  loadTexture(file) { return Promise.resolve(this.texture(file)); }
 
   setSpriteTexture(sp, file, width, scaleMul = 1) {
-    sp.material.map = this.texture(file);
-    sp.material.needsUpdate = true;
-    const tex = sp.material.map;
-    const aspect = tex.image && tex.image.width ? tex.image.width / tex.image.height : sp.userData.aspect;
-    const w = width * scaleMul;
-    sp.scale.set(w, w / aspect, 1);
-    sp.userData.aspect = aspect;
-    if (sp.userData.shadow) {
-      sp.userData.shadow.scale.set(width * 0.85, width * 0.38, 1);
-    }
+    if (!sp) return;
+    sp.file = file;
+    sp.width = width * scaleMul;
+    this.texture(file, sp);
   }
 
   removeSprite(tag) {
     const sp = this.byTag.get(tag);
     if (!sp) return;
-    this.scene.remove(sp);
-    if (sp.userData.shadow) this.scene.remove(sp.userData.shadow);
-    this.clickables = this.clickables.filter(o => o !== sp);
+    this.sprites = this.sprites.filter((i) => i !== sp);
+    this.clickables = this.clickables.filter((o) => o !== sp);
     this.byTag.delete(tag);
-    sp.material.dispose();
+    this._staticDirty = true;
   }
 
   getSprite(tag) { return this.byTag.get(tag); }
 
-  // ---------- انتخاب / هایلایت ----------
-  showHighlight(x, z, size = 1.6, color = 0x5adc6e) {
-    if (!this.highlight) {
-      const mat = new THREE.MeshBasicMaterial({
-        map: this.ringTex, transparent: true, depthWrite: false, depthTest: false,
-      });
-      this.highlight = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
-      this.highlight.rotation.x = -Math.PI / 2;
-      this.highlight.renderOrder = 2500;
-      this.scene.add(this.highlight);
+  addActor(actor) { this.dynamic.push(actor); return actor; }
+
+  addStaticActor(actor) {
+    if (actor.frameIndex == null) actor.frameIndex = -1;
+    this.staticActors.push(actor);
+    this._staticDirty = true;
+    return actor;
+  }
+
+  removeActor(actor) { this.dynamic = this.dynamic.filter((a) => a !== actor); }
+
+  // ---------- برچسب‌های HTML ----------
+  worldToScreen(x, y, z) {
+    if (this.view.dirty) this.view.update();
+    const p = this.view.css(x, y, z);
+    const rect = this.canvas.getBoundingClientRect();
+    return { x: p.x + rect.left, y: p.y + rect.top, depth: p.depth };
+  }
+
+  // ---------- دوربین ----------
+  /**
+   * کشیدنِ نقشه با انگشت: محتوا دقیقاً به اندازه‌ی حرکتِ انگشت جابه‌جا می‌شود.
+   * (تغییرِ pan در فضای شهر حساب می‌شود، بعد به محورهای دید تبدیل می‌گردد.)
+   */
+  panBy(dx, dy) {
+    const s = this.view.scale || 1;
+    const S2 = Math.SQRT1_2;
+    const a = dx / (S2 * s);
+    const b = dy / (S2 * Math.abs(CAM_UP.z) * s);
+    this.panTarget.x += (b - a) / 2;
+    this.panTarget.z += (-a - b) / 2;
+    const B = MAP_BOUNDS;
+    this.panTarget.x = clamp(this.panTarget.x, B.panMinX, B.panMaxX);
+    this.panTarget.z = clamp(this.panTarget.z, B.panMinZ, B.panMaxZ);
+  }
+
+  zoomBy(delta) { this.zoom = clamp(this.zoom * (delta > 0 ? 0.93 : 1.07), ZOOM_MIN, ZOOM_MAX); }
+  zoomTo(z) { this.zoom = clamp(z, ZOOM_MIN, ZOOM_MAX); }
+
+  focusOn(x, z, zoom = 1.15) {
+    const B = MAP_BOUNDS;
+    this.panTarget.x = clamp(x, B.panMinX, B.panMaxX);
+    this.panTarget.z = clamp(z - 1.2, B.panMinZ, B.panMaxZ);
+    this.zoom = clamp(zoom, ZOOM_MIN, ZOOM_MAX);
+  }
+
+  setArea(areaKey) {
+    this.area = AREAS[areaKey] || AREAS.town;
+    const f = this.area.focus;
+    this.panTarget.x = f.x;
+    this.panTarget.z = f.z;
+    this.zoom = clamp(f.zoom, ZOOM_MIN, ZOOM_MAX);
+  }
+
+  // ---------- انتخاب ----------
+  /** همه‌ی چیزهایی که در این نقطه‌ی صفحه دیده می‌شوند، از نزدیک به دور */
+  pickItems(px, py) {
+    if (this.view.dirty) this.view.update();
+    const rect = this.canvas.getBoundingClientRect();
+    const x = (px - rect.left) * this.view.dpr;
+    const y = (py - rect.top) * this.view.dpr;
+    const hits = [];
+    const test = (it) => {
+      if (!it || !it.pos) return;
+      const p = this.view.screen(it.pos.x, it.pos.y || 0, it.pos.z);
+      const box = this._screenBox(it, p);
+      if (!box) return;
+      if (x < box.x0 || x > box.x1 || y < box.y0 || y > box.y1) return;
+      hits.push({ it, d: p.depth });
+    };
+    for (const a of this.dynamic) test(a);
+    for (const a of this.staticActors) test(a);
+    for (const s of this.sprites) test(s);
+    // ساختمان‌ها در اولویت‌اند (لمسِ آدمکِ جلوی در، نباید ساختمان را بپوشاند)
+    hits.sort((a, b) => b.d - a.d);
+    return hits.map((h) => h.it);
+  }
+
+  pick(px, py) {
+    const hits = this.pickItems(px, py);
+    // ساختمانِ کلیک‌پذیر جلوتر از بقیه بررسی می‌شود
+    return hits.find((h) => h.clickable && h.tag) || hits[0] || null;
+  }
+
+  _screenBox(it, p) {
+    const frame = it.gFrame || (it.frameIndex >= 0 ? atlas.frames[it.frameIndex] : null);
+    if (!frame) {
+      // اسپریتِ ساختمانِ اصلی (تصویرِ کامل) — عرضِ آن با واحدِ شهر داده می‌شود
+      if (!it.img || !it.width) return null;
+      const w = it.width * this.view.scale;
+      const h = w / Math.max(0.1, it.aspect || 1.5);
+      return { x0: p.x - w / 2, x1: p.x + w / 2, y0: p.y - h, y1: p.y, w, h };
     }
-    this.highlight.visible = true;
-    this.highlight.position.set(x, 0.05, z);
-    this.highlight.scale.set(size, size, 1);
-    this.highlight.material.color.setHex(color);
+    const k = this.view.scale * frame.scale;
+    const x0 = p.x - frame.ox * k, y0 = p.y - frame.oy * k;
+    return { x0, x1: x0 + frame.sw * k, y0, y1: y0 + frame.sh * k };
   }
 
-  hideHighlight() {
-    if (this.highlight) this.highlight.visible = false;
+  pickGround(px, py) {
+    if (this.view.dirty) this.view.update();
+    const rect = this.canvas.getBoundingClientRect();
+    const g = this.view.groundAt(px - rect.left, py - rect.top);
+    const B = MAP_BOUNDS;
+    if (g.x < B.minX || g.x > B.maxX || g.z < B.minZ || g.z > B.maxZ) return null;
+    return g;
   }
 
-  // ---------- سایه/پد جانمایی هنگام درگ‌اندراپ ----------
+  // ---------- هایلایت و پدِ جانمایی ----------
+  showHighlight(x, z, size = 1.6, color = 0x5adc6e) { this.highlight = { x, z, size, color: '#' + hex(color) }; }
+  hideHighlight() { this.highlight = null; }
+
   showPlacementGhost(x, z, size, valid) {
-    if (!this.placementGhost) {
-      const mat = new THREE.MeshBasicMaterial({
-        map: this.ghostTex, transparent: true, depthWrite: false, depthTest: false,
-      });
-      this.placementGhost = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
-      this.placementGhost.rotation.x = -Math.PI / 2;
-      this.placementGhost.renderOrder = 2600;
-      this.scene.add(this.placementGhost);
-    }
-    this.placementGhost.visible = true;
-    this.placementGhost.position.set(x, 0.06, z);
-    this.placementGhost.scale.set(size, size * 0.72, 1);
-    this.placementGhost.material.color.setHex(valid ? 0x62e57a : 0xff5b52);
-    this.placementGhost.material.opacity = 0.85;
+    this.ghost = { x, z, w: size, d: size * 0.72, color: valid ? '#62e57a' : '#ff5b52' };
   }
 
-  // پد جانمایی مستطیلی (برای درگ گروهی دیوارها/حصارها)
   showPlacementGhostRect(x, z, w, d, valid) {
-    this.showPlacementGhost(x, z, w, valid);
-    if (this.placementGhost) this.placementGhost.scale.set(w, d, 1);
+    this.ghost = { x, z, w, d, color: valid ? '#62e57a' : '#ff5b52' };
   }
 
-  hidePlacementGhost() {
-    if (this.placementGhost) this.placementGhost.visible = false;
-  }
+  hidePlacementGhost() { this.ghost = null; }
 
-  // ---------- افکت هاور / لمس ----------
   hoverSprite(tag, on) {
-    const sp = this.getSprite(tag);
-    if (!sp) return;
-    const base = sp.userData.baseScale;
-    if (on) {
-      sp.userData.hoverT = 0;
-      sp.userData.hovering = true;
-    } else if (sp.userData) {
-      sp.userData.hovering = false;
-      sp.scale.copy(base);
-      sp.material.rotation = 0;
-    }
+    const sp = this.byTag.get(tag);
+    if (sp) sp.hover = on;
   }
 
   shakeSprite(tag, strength = 1) {
-    const sp = this.getSprite(tag);
-    if (!sp) return;
-    sp.userData.shakeT = 0;
-    sp.userData.shakeS = strength;
+    const sp = this.byTag.get(tag);
+    if (sp) sp.shake = { t: 0, s: strength };
   }
 
   // ---------- افکت‌ها ----------
   explode(x, y, z, colorHex = 0xffd070) {
-    const group = [];
     const colors = [colorHex, 0xffffff, 0xffb347, 0x9be15d];
-    for (let i = 0; i < 18; i++) {
-      const mat = new THREE.SpriteMaterial({
-        map: this.particleTex, color: colors[i % colors.length],
-        transparent: true, depthTest: false, depthWrite: false,
-      });
-      const p = new THREE.Sprite(mat);
-      const s = 0.22 + Math.random() * 0.35;
-      p.scale.set(s, s, 1);
-      p.position.set(x, y, z);
-      p.renderOrder = 3000;
-      const ang = Math.random() * Math.PI * 2;
-      const speed = 1.6 + Math.random() * 2.6;
-      this.scene.add(p);
-      group.push({
-        sprite: p,
-        vx: Math.cos(ang) * speed,
-        vy: 1.2 + Math.random() * 3.2,
-        vz: Math.sin(ang) * speed * 0.55,
-        life: 0.75 + Math.random() * 0.5,
-        age: 0,
+    for (let i = 0; i < 14; i++) {
+      const ang = Math.random() * Math.PI * 2, speed = 1.4 + Math.random() * 2.4;
+      this.effects.push({
+        x, y, z,
+        vx: Math.cos(ang) * speed, vz: Math.sin(ang) * speed,
+        vy: 2.2 + Math.random() * 2.2,
+        size: 0.18 + Math.random() * 0.28,
+        color: '#' + hex(colors[i % colors.length]),
+        age: 0, life: 0.55 + Math.random() * 0.5,
       });
     }
-    // موج ضربه
-    const ring = new THREE.Mesh(
-      new THREE.PlaneGeometry(1, 1),
-      new THREE.MeshBasicMaterial({
-        map: this.ringTex, transparent: true, depthTest: false,
-        color: 0xffe28a, opacity: 0.95,
-      })
-    );
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.set(x, 0.06, z);
-    ring.renderOrder = 2900;
-    this.scene.add(ring);
-    this.effects.push({
-      type: 'ring', mesh: ring, age: 0, life: 0.55,
-    });
-    this.effects.push({ type: 'particles', items: group, age: 0, life: 1.3 });
   }
 
-  coinBurst(x, y, z) {
-    this.explode(x, y, z, 0xffe27a);
-  }
-
-  // ---------- ری‌کست ----------
-  pick(clientX, clientY) {
-    const rect = this.canvas.getBoundingClientRect();
-    this.pointerNdc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
-    this.pointerNdc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
-    this.raycaster.setFromCamera(this.pointerNdc, this.camera);
-    const hits = this.raycaster.intersectObjects(this.clickables, false);
-    return hits.length ? hits[0].object : null;
-  }
-
-  // ری‌کست روی مش‌های اینستنس‌شده‌ی جنگل (برای پاک‌کردن درخت/سنگ/علف با کلیک)
-  pickInstanced(objects, clientX, clientY) {
-    if (!objects || !objects.length) return null;
-    const rect = this.canvas.getBoundingClientRect();
-    this.pointerNdc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
-    this.pointerNdc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
-    this.raycaster.setFromCamera(this.pointerNdc, this.camera);
-    const hits = this.raycaster.intersectObjects(objects, false);
-    return hits.length ? hits[0] : null;
-  }
-
-  pickGround(clientX, clientY) {
-    const rect = this.canvas.getBoundingClientRect();
-    this.pointerNdc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
-    this.pointerNdc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
-    this.raycaster.setFromCamera(this.pointerNdc, this.camera);
-    const hits = this.raycaster.intersectObject(this.ground, false);
-    return hits.length ? hits[0].point : null;
-  }
-
-  worldToScreen(x, y, z) {
-    const v = new THREE.Vector3(x, y, z).project(this.camera);
-    const rect = this.canvas.getBoundingClientRect();
-    return {
-      x: (v.x * 0.5 + 0.5) * rect.width + rect.left,
-      y: (-v.y * 0.5 + 0.5) * rect.height + rect.top,
-    };
-  }
-
-  // ---------- دوربین ----------
-  panBy(dx, dy) {
-    // dx, dy در پیکسل → حرکت در صفحه‌ی زمین
-    const rect = this.canvas.getBoundingClientRect();
-    const worldPerPixel = (VIEW_HEIGHT / this.zoom) / rect.height;
-    const right = new THREE.Vector3();
-    const fwd = new THREE.Vector3();
-    this.camera.getWorldDirection(fwd);
-    fwd.y = 0;
-    fwd.normalize();
-    right.crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize().negate();
-    this.panTarget.addScaledVector(right, dx * worldPerPixel);
-    // نقشه زیر انگشت حرکت می‌کند: انگشت بالا → نقشه بالا می‌رود (جهت طبیعی لمسی)
-    this.panTarget.addScaledVector(fwd, dy * worldPerPixel * 1.35);
-    // دوربین روی کل نقشه آزاد است: با کشیدن می‌توانی از شهر تا مزرعه بروی
-    const B = MAP_BOUNDS;
-    this.panTarget.x = THREE.MathUtils.clamp(this.panTarget.x, B.panMinX, B.panMaxX);
-    this.panTarget.z = THREE.MathUtils.clamp(this.panTarget.z, B.panMinZ, B.panMaxZ);
-  }
-
-  zoomBy(delta) {
-    // زوم متعادل و قابل مدیریت
-    this.zoom = THREE.MathUtils.clamp(this.zoom * (delta > 0 ? 0.93 : 1.07), ZOOM_MIN, ZOOM_MAX);
-  }
-
-  // زوم لمسی (پینچ با دو انگشت روی موبایل)
-  zoomTo(z) {
-    this.zoom = THREE.MathUtils.clamp(z, ZOOM_MIN, ZOOM_MAX);
-  }
-
-  focusOn(x, z, zoom = 1.15) {
-    const B = MAP_BOUNDS;
-    this.panTarget.set(
-      THREE.MathUtils.clamp(x, B.panMinX, B.panMaxX),
-      0,
-      THREE.MathUtils.clamp(z - 1.2, B.panMinZ, B.panMaxZ)
-    );
-    this.zoom = THREE.MathUtils.clamp(zoom, ZOOM_MIN, ZOOM_MAX);
-  }
-
-  // تعویض صحنه (زیر ابرها صدا زده می‌شود): دوربین یک‌جا به صحنه‌ی جدید می‌پرد
-  setArea(areaKey) {
-    this.area = AREAS[areaKey] || AREAS.town;
-    const f = this.area.focus;
-    this.panTarget.set(f.x, 0, f.z);
-    this.zoom = THREE.MathUtils.clamp(f.zoom, ZOOM_MIN, ZOOM_MAX);
-    this._updateCamera();
-  }
+  coinBurst(x, y, z) { this.explode(x, y, z, 0xffe27a); }
 
   // ---------- حلقه‌ی رندر ----------
-  resize() {
-    const w = this.canvas.clientWidth || window.innerWidth;
-    const h = this.canvas.clientHeight || window.innerHeight;
-    this.renderer.setSize(w, h, false);
-    this.aspect = w / h;
-    this._updateCamera();
-  }
-
-  _updateCamera() {
-    const hw = (VIEW_HEIGHT * this.aspect) / 2 / this.zoom;
-    const hh = VIEW_HEIGHT / 2 / this.zoom;
-    this.camera.left = -hw;
-    this.camera.right = hw;
-    this.camera.top = hh;
-    this.camera.bottom = -hh;
-    this.camera.updateProjectionMatrix();
-    this.camera.position.set(
-      CAM_POS.x + this.panTarget.x - CAM_TARGET.x,
-      CAM_POS.y,
-      CAM_POS.z + this.panTarget.z - CAM_TARGET.z
-    );
-    this.camera.lookAt(this.panTarget);
-  }
-
   update(dt) {
-    // تکان ملایم و هاور اسپریت‌ها (درخت‌ها و...)
-    const t = performance.now() / 1000;
-    for (const sp of this.clickables) {
-      if (!sp.userData) continue;
-      const base = sp.userData.baseScale;
-      if (!base) continue;
-      if (sp.userData.hovering) {
-        // هاور: فقط بزرگ‌شدن نرم و خیلی کم — بدون لرزش و چرخش
-        sp.userData.hoverT = (sp.userData.hoverT || 0) + dt;
-        const q = Math.min(1, sp.userData.hoverT / 0.22);
-        const e = q * q * (3 - 2 * q);
-        const k = 1 + 0.05 * e;
-        sp.scale.set(base.x * k, base.y * k, 1);
-        sp.material.rotation = 0;
-      } else if (sp.userData.type === 'tree' || sp.userData.sway) {
-        // تکان طبیعی درخت‌ها در حالت عادی
-        const phase = (sp.userData.swayPhase = sp.userData.swayPhase ?? Math.random() * Math.PI * 2);
-        sp.material.rotation = Math.sin(t * 1.4 + phase) * 0.028;
-      }
-      if (sp.userData.shakeT !== undefined) {
-        sp.userData.shakeT += dt;
-        const st = sp.userData.shakeT;
-        if (st < 0.55) {
-          sp.material.rotation = Math.sin(st * 34) * 0.16 * (1 - st / 0.55) * (sp.userData.shakeS || 1);
-        } else {
-          delete sp.userData.shakeT;
-          sp.material.rotation = 0;
-        }
-      }
-    }
+    const view = this.view;
+    view.set(this.panTarget, this.zoom);
+    view.update();
+    const ctx = this.ctx;
+    const W = view.cw, H = view.ch;
 
-    // انیمیشن افکت‌ها
-    for (const fx of this.effects) {
-      fx.age += dt;
-      const t = Math.min(1, fx.age / fx.life);
-      if (fx.type === 'particles') {
-        for (const p of fx.items) {
-          p.age += dt;
-          if (p.age >= p.life) { p.sprite.visible = false; continue; }
-          p.vy -= 6.5 * dt;
-          p.sprite.position.x += p.vx * dt;
-          p.sprite.position.y = Math.max(0.05, p.sprite.position.y + p.vy * dt);
-          p.sprite.position.z += p.vz * dt;
-          const k = 1 - p.age / p.life;
-          p.sprite.material.opacity = k;
-          const sc = (0.5 + k) * p.sprite.scale.x;
-          p.sprite.scale.setScalar(Math.max(0.05, sc * 0.35));
-        }
-      } else if (fx.type === 'ring') {
-        fx.mesh.scale.setScalar(1 + t * 3.2);
-        fx.mesh.material.opacity = 0.95 * (1 - t);
-      }
-    }
-    this.effects = this.effects.filter(fx => {
-      if (fx.age < fx.life) return true;
-      if (fx.type === 'particles') fx.items.forEach(p => this.scene.remove(p.sprite));
-      if (fx.type === 'ring') this.scene.remove(fx.mesh);
-      return false;
-    });
+    // هیچ‌جا سفید نماند: اول چمن، بعد زمینِ پخته‌شده
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#7ec850';
+    ctx.fillRect(0, 0, W, H);
 
-    // نرم شدن حرکت دوربین
-    this.camera.position.x += ((CAM_POS.x + this.panTarget.x - CAM_TARGET.x) - this.camera.position.x) * Math.min(1, dt * 6);
-    this.camera.position.z += ((CAM_POS.z + this.panTarget.z - CAM_TARGET.z) - this.camera.position.z) * Math.min(1, dt * 6);
-    this._updateCamera();
+    this._drawGround(ctx);
 
-    this.renderer.render(this.scene, this.camera);
+    // مرتب‌سازیِ یک‌باره‌ی چیزهای ثابت (وقتی دوربین یا فهرست عوض شد)
+    this._prepareStatic();
+
+    this._shadowPass(ctx);
+
+    // همه‌ی چیزهای ثابت + متحرک‌ها در یک گذرِ مرتب‌شده (تا عمق درست بماند)
+    this._drawSorted(ctx);
+
+    if (this.highlight) this._drawRing(ctx, this.highlight);
+    if (this.ghost) this._drawGhost(ctx);
+    this._drawEffects(ctx, dt);
+
+    this.renderCount++;
   }
+
+  // زمین: یک تصویرِ بزرگ که از پیش با همان زاویه/رنگ پخته شده
+  _drawGround(ctx) {
+    const g = atlas.ground;
+    if (!g || !g.img) return;
+    const view = this.view;
+    const k = view.scale;
+    // x0/y0 در «واحدِ دید» هستند؛ تبدیلشان با دوربین یعنی فقط یک جمع و ضرب
+    const x = g.x0 * k + view.wx;
+    const y = g.y0 * k + view.wy;
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(g.img, 0, 0, g.iw || g.img.width, g.ih || g.img.height, x, y, g.w * k, g.h * k);
+  }
+
+  _shadowPass(ctx) {
+    const view = this.view;
+    const W = view.cw, H = view.ch;
+    ctx.globalAlpha = 1;
+    const blob = (x, z, w, d, op) => {
+      const p = view.screen(x, 0.01, z);
+      const pw = w * view.scale, pd = d * view.scale;
+      if (p.x + pw < 0 || p.x - pw > W || p.y + pd < 0 || p.y - pd > H) return;
+      ctx.globalAlpha = op == null ? 1 : op;
+      ctx.drawImage(this.shadowTex, p.x - pw / 2, p.y - pd / 2, pw, pd);
+    };
+    for (const a of this.dynamic) if (a.shadow) blob(a.pos.x, a.pos.z, a.shadow.w, a.shadow.d, a.shadow.opacity);
+    for (const a of this.staticActors) if (a.shadow) blob(a.pos.x, a.pos.z, a.shadow.w, a.shadow.d, a.shadow.opacity);
+    for (const s of this.sprites) if (s.shadowSpec) {
+      const sh = s.shadowSpec;
+      blob(sh.x ?? s.pos.x, sh.z ?? s.pos.z, sh.w || 2, sh.d || 1, sh.opacity);
+    }
+    // سایه‌ی نمونه‌های ثابت: از روی مدل‌ها (به‌صورتِ دسته‌ای و فقط وقتی دوربین عوض شد)
+    for (const it of this._sortedStatic) {
+      if (!it.shadowSpec) continue;
+      blob(it.pos.x, it.pos.z, it.shadowSpec.w, it.shadowSpec.d, it.shadowSpec.opacity);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /** فهرستِ مرتب‌شده‌ی همه‌ی چیزهای قابلِ کشیدن، از دور به نزدیک */
+  _prepareStatic() {
+    const key = this._camStamp();
+    if (!this._staticDirty && this._sortedKey === key) return;
+    const list = [];
+    // نمونه‌های ثابت از نقشه
+    for (const it of this.staticItems) {
+      it.depth = depthOf(it.pos.x, it.pos.y || 0, it.pos.z);
+      list.push(it);
+    }
+    // ماشین‌ها/چیزهای ثابتِ اضافه
+    for (const it of this.staticActors) {
+      it.depth = depthOf(it.pos.x, it.pos.y || 0, it.pos.z);
+      list.push(it);
+    }
+    // ساختمان‌های اصلی
+    for (const it of this.sprites) {
+      it.depth = depthOf(it.pos.x, it.pos.y || 0, it.pos.z);
+      list.push(it);
+    }
+    for (const it of list) {
+      const fi = it.frameIndex != null && it.frameIndex >= 0 ? it.frameIndex : -1;
+      if (fi < 0) it.frameIndex = this._resolveFrame(it);
+      it.gFrame = it.frameIndex >= 0 ? atlas.frames[it.frameIndex] : null;
+      // سایه‌ی نمونه‌های پخته‌شده از اندازه‌ی خودِ مدل می‌آید
+      if (!it.shadowSpec && it.type && it.gFrame) {
+        const sz = (atlas.models[it.type] || {}).size;
+        if (sz) {
+          // سایه‌ی بیضی زیرِ پای مدل — کوچک و کم‌رنگ تا زیرِ ساختمان‌های بزرگ لکه نشود
+          const sc = it.scale || 1;
+          it.shadowSpec = {
+            w: Math.max(0.5, Math.min(3.2, sz[0] * sc * 0.8)),
+            d: Math.max(0.35, Math.min(2.4, sz[2] * sc * 0.5)),
+            opacity: 0.5,
+          };
+        }
+      }
+    }
+    list.sort((a, b) => a.depth - b.depth);
+    this._sortedStatic = list;
+    this._sortedKey = key;
+    this._staticDirty = false;
+  }
+
+  _resolveFrame(it) {
+    if (!it.type) return -1;
+    if (it.frameIndex != null && it.frameIndex >= 0) return it.frameIndex;
+    // چرخشِ شیء روی نقشه (رادیان، فضای شهر) → همان عددی که پخت با آن چرخانده
+    const deg = ((it.rot || 0) * 180) / Math.PI;
+    return frameIndexFor(it.type, deg);
+  }
+
+  _camStamp() {
+    const v = this.view;
+    return `${v.pan.x.toFixed(2)},${v.pan.z.toFixed(2)},${v.zoom.toFixed(3)},${v.cw}x${v.ch}`;
+  }
+
+  _drawSorted(ctx) {
+    const view = this.view;
+    const W = view.cw, H = view.ch;
+    // متحرک‌ها هر فریم مرتب می‌شوند و در فهرستِ ثابت (که از قبل مرتب است) ادغام
+    // می‌شوند — ادغام به‌جای sort سراسری، چون فهرستِ ثابت هزار ردیف است.
+    const dyn = this.dynamic;
+    for (const a of dyn) a.depth = depthOf(a.pos.x, a.pos.y || 0, a.pos.z);
+    dyn.sort((a, b) => a.depth - b.depth);
+    const statics = this._sortedStatic;
+    ctx.imageSmoothingQuality = 'low';
+    let i = 0, j = 0;
+    while (i < statics.length || j < dyn.length) {
+      // (هر دو فهرست مرتب‌اند؛ ادغامِ ساده)
+      const a = statics[i], b = dyn[j];
+      const it = (!b || (a && a.depth <= b.depth)) ? (i++, a) : (j++, b);
+      if (it.isMainBuilding) { this._drawMain(ctx, it, W, H); continue; }
+      const frame = this._frameOf(it);
+      if (!frame || !frame.img) continue;
+      const p = view.screen(it.pos.x, it.pos.y || 0, it.pos.z);
+      const k = view.scale * frame.scale * ((it.scale || 1) / (frame.nominal || 1));
+      const w = frame.sw * k, h = frame.sh * k;
+      const x0 = p.x - frame.ox * k, y0 = p.y - frame.oy * k;
+      if (x0 + w < -4 || x0 > W + 4 || y0 + h < -4 || y0 > H + 4) continue;
+      ctx.drawImage(frame.img, frame.sx, frame.sy, frame.sw, frame.sh, x0, y0, w, h);
+      if (it.state === 'yellow' || it.state === 'green' || it.state === 'red') this._drawSignal(ctx, it, x0, y0, w, h);
+    }
+  }
+
+  /**
+   * قابِ یک شیء. برای نمونه‌های ثابت فقط یک‌بار حساب می‌شود؛ برای متحرک‌ها
+   * (ماشین/آدمک) هر بار که چرخش بیش از نیم‌پله عوض شود دوباره جست‌وجو می‌شود.
+   */
+  _frameOf(it) {
+    if (it.frameIndex >= 0) {
+      it.gFrame = it.gFrame || atlas.frames[it.frameIndex];
+      // متحرک: چرخش عوض شده؟
+      if (it._live) {
+        const deg = ((it.rot || 0) * 180) / Math.PI;
+        if (it._frameDeg == null || Math.abs(((deg - it._frameDeg + 540) % 360) - 180) > atlas.rotStep * 0.5) {
+          it._frameDeg = deg;
+          const fi = frameIndexFor(it.type, deg);
+          if (fi >= 0) { it.frameIndex = fi; it.gFrame = atlas.frames[fi]; }
+        }
+      }
+      return it.gFrame;
+    }
+    const fi = this._resolveFrame(it);
+    if (fi < 0) return null;
+    it.frameIndex = fi;
+    it.gFrame = atlas.frames[fi];
+    return it.gFrame;
+  }
+
+  _drawMain(ctx, it, W, H) {
+    if (!it.img || !it.width) return;
+    const view = this.view;
+    const p = view.screen(it.pos.x, it.pos.y || 0, it.pos.z);
+    // «width» در واحدِ شهر است (مثلِ نسخه‌ی سه‌بعدی)، پس فقط در مقیاسِ دید ضرب می‌شود
+    const w = it.width * view.scale * (it.scale || 1);
+    const h = w / Math.max(0.1, it.aspect || 1.5);
+    const y0 = p.y - h, x0 = p.x - w / 2;
+    if (x0 + w < -4 || x0 > W + 4 || y0 + h < -4 || y0 > H + 4) return;
+    ctx.drawImage(it.img, x0, y0, w, h);
+  }
+
+  /** چراغِ کوچکِ راهنما روی تابلوی چراغ راهنما (سه نقطه‌ی رنگی) */
+  _drawSignal(ctx, it, x0, y0, w, h) {
+    const colors = { red: '#ff3b30', yellow: '#ffc12e', green: '#2fe07a' };
+    const c = colors[it.state];
+    if (!c) return;
+    const r = Math.max(2, w * 0.06);
+    const cx = x0 + w * 0.5, cy = y0 + h * (it.state === 'red' ? 0.30 : it.state === 'yellow' ? 0.36 : 0.42);
+    ctx.save();
+    ctx.fillStyle = c;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  _drawRing(ctx, h) {
+    const view = this.view;
+    const p = view.screen(h.x, 0.02, h.z);
+    const s = (h.size || 1.6) * view.scale;
+    ctx.save();
+    ctx.globalAlpha = 0.95;
+    ctx.strokeStyle = h.color;
+    ctx.lineWidth = Math.max(2, s * 0.06);
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y, s / 2, (s / 2) * 0.55, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  _drawGhost(ctx) {
+    const g = this.ghost;
+    const view = this.view;
+    const p = view.screen(g.x, 0.02, g.z);
+    const w = g.w * view.scale, d = g.d * view.scale;
+    ctx.save();
+    ctx.globalAlpha = 0.9;
+    ctx.drawImage(this.ghostTex, p.x - w / 2, p.y - d / 2, w, d);
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = g.color;
+    ctx.lineWidth = Math.max(2, w * 0.04);
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y, w / 2, d / 2, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  _drawEffects(ctx, dt) {
+    const view = this.view;
+    for (let i = this.effects.length - 1; i >= 0; i--) {
+      const e = this.effects[i];
+      e.age += dt;
+      if (e.age >= e.life) { this.effects.splice(i, 1); continue; }
+      e.vy -= 6.5 * dt;
+      e.x += e.vx * dt;
+      e.y = Math.max(0.05, e.y + e.vy * dt);
+      e.z += e.vz * dt;
+      const k = 1 - e.age / e.life;
+      const p = view.screen(e.x, e.y, e.z);
+      const s = e.size * view.scale * (0.5 + k);
+      ctx.globalAlpha = k;
+      ctx.fillStyle = e.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, Math.max(1, s / 2), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+// ---------- کمکی‌ها ----------
+const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+const hex = (n) => (n | 0).toString(16).padStart(6, '0').slice(-6);
+
+function makeBlob(size, stops, ring = false) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d');
+  const h = size / 2;
+  const grd = g.createRadialGradient(h, h, size * 0.05, h, h, h * 0.97);
+  for (const [at, col] of stops) grd.addColorStop(at, col);
+  g.fillStyle = grd;
+  g.fillRect(0, 0, size, size);
+  if (ring) {
+    g.strokeStyle = 'rgba(255,255,255,0.9)';
+    g.lineWidth = size * 0.05;
+    g.beginPath();
+    g.arc(h, h, h * 0.84, 0, Math.PI * 2);
+    g.stroke();
+  }
+  return c;
+}
+
+function makeRing(color) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  g.strokeStyle = color;
+  g.lineWidth = 10;
+  g.beginPath();
+  g.arc(64, 64, 52, 0, Math.PI * 2);
+  g.stroke();
+  return c;
 }

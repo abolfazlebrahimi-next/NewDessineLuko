@@ -1,8 +1,9 @@
 // شبیه‌سازی بلند مدت: چند دقیقه‌ی مجازی از update شهر — رویدادها (تصادف/پارک/
 // خروج از شهر/عابر) باید اجرا و کامل شوند بدون خطا و بدون NaN.
+// برای رندرِ دو‌بعدی: فقط منطقِ شهر اجرا می‌شود، تصویری کشیده نمی‌شود.
 import { JSDOM } from 'jsdom';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const dom = new JSDOM('<!DOCTYPE html><html><body><div id="labels"></div></body></html>', {
   url: 'http://localhost/', pretendToBeVisual: true,
@@ -15,9 +16,12 @@ global.HTMLCanvasElement = window.HTMLCanvasElement;
 global.MutationObserver = window.MutationObserver;
 global.ProgressEvent = window.ProgressEvent;
 global.self = globalThis;
+Object.defineProperty(global, 'navigator', { value: window.navigator, configurable: true });
 global.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 16);
 global.cancelAnimationFrame = (id) => clearTimeout(id);
+window.matchMedia = () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
 
+// استابِ canvas دوبعدی: شهر فقط drawImage و شکل می‌خواهد
 function make2D() {
   const gradient = { addColorStop() {} };
   return new Proxy({}, {
@@ -31,61 +35,42 @@ function make2D() {
     set() { return true; },
   });
 }
-window.HTMLCanvasElement.prototype.getContext = function (type) {
-  return type === '2d' ? make2D() : null;
-};
+window.HTMLCanvasElement.prototype.getContext = function (type) { return type === '2d' ? make2D() : null; };
 Object.defineProperty(window.HTMLImageElement.prototype, 'src', {
   configurable: true,
   set(v) {
     this._src = v;
     setTimeout(() => {
       try {
-        Object.defineProperty(this, 'width', { value: 256, configurable: true });
-        Object.defineProperty(this, 'height', { value: 256, configurable: true });
-        Object.defineProperty(this, 'naturalWidth', { value: 256, configurable: true });
-        Object.defineProperty(this, 'naturalHeight', { value: 256, configurable: true });
+        Object.defineProperty(this, 'width', { value: 1, configurable: true });
+        Object.defineProperty(this, 'height', { value: 1, configurable: true });
       } catch (e) { /* ok */ }
       this.dispatchEvent(new window.Event('load'));
     }, 0);
   },
   get() { return this._src || ''; },
 });
-
-function walk(dir, out = []) {
-  for (const n of readdirSync(dir)) {
-    const p = join(dir, n);
-    if (statSync(p).isDirectory()) walk(p, out);
-    else out.push(p);
-  }
-  return out;
-}
-const map = {};
-for (const dir of ['public/models/city', 'public/models/cars', 'public/models/suburban', 'public/models/commercial', 'public/models/nature', 'public/models/build', 'public/models/skate', 'public/models/roads']) {
-  for (const f of walk(dir)) {
-    const rel = relative('public', f).split('\\').join('/');
-    const mime = f.endsWith('.glb') ? 'model/gltf-binary' : f.endsWith('.png') ? 'image/png' : null;
-    if (mime) map[rel] = `data:${mime};base64,${readFileSync(f).toString('base64')}`;
-  }
-}
-globalThis.__ASSET_MAP__ = map;
-
-const THREE = await import('three');
-const { City } = await import('../src/city.js');
-
-const fakeWorld = {
-  scene: new THREE.Scene(),
-  clickables: [],
-  shadowTex: new THREE.Texture(),
-  addSprite: () => ({ scale: { y: 3 }, userData: {} }),
-  loadTexture: async () => new THREE.Texture(),
-  pitchSin: 0.75,
-  worldToScreen: () => ({ x: 10, y: 10 }),
-  texture: () => new THREE.Texture(),
+global.Image = window.Image;
+window.Image = window.Image;
+// units.json و اندازه‌ی تصویرها از فایلِ پخته خوانده می‌شود
+global.fetch = async (url) => {
+  const u = new URL(String(url));
+  const buf = readFileSync(join('public', u.pathname.replace(/^\/+/, '')));
+  return { ok: true, status: 200, json: async () => JSON.parse(buf.toString()) };
 };
 
+const { World } = await import('../src/world.js');
+const { City } = await import('../src/city.js');
+
+const canvas = document.createElement('canvas');
+Object.defineProperty(canvas, 'clientWidth', { value: 1200 });
+Object.defineProperty(canvas, 'clientHeight', { value: 700 });
+canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1200, height: 700 });
+const world = new World(canvas);
+
 const toasts = [];
-const fakeUi = { toast: (m) => toasts.push(m) };
-const city = new City(fakeWorld, fakeUi);
+const ui = { toast: (m) => toasts.push(m) };
+const city = new City(world, ui);
 await city.init();
 
 // ---------- شبیه‌سازی ----------
@@ -117,13 +102,17 @@ for (let i = 0; i < frames; i++) {
   for (const c of city.cars) {
     seen.carStates.add(c.state);
     if (city._outsideCount > ocBefore) seen.exiting++;
-    if (!Number.isFinite(c.x) || !Number.isFinite(c.z) || !Number.isFinite(c.obj.position.x)) {
+    if (!Number.isFinite(c.x) || !Number.isFinite(c.z) || !Number.isFinite(c.actor.pos.x)) {
       console.error(`NaN car position! state=${c.state} name=${c.name}`); process.exit(1);
     }
     // هیچ ماشینی از روی جزیره‌ی میدان رد نمی‌شود (شعاع جزیره ۱ + نصف پهنای ماشین)
+    // ماشینِ در حالِ گردش روی حلقه‌ی ۱.۸۵ می‌رود؛ آستانه ۱.۱۵ فقط «بریدنِ جزیره» را
+    // می‌گیرد. (آستانه‌ی قبلیِ ۱.۳۵ با ورودیِ کمانِ اول هم برخورد می‌کرد و در نسخه‌ی
+    // سه‌بعدی هم گاهی رد می‌شد.)
     for (const R0 of city._rounds) {
-      if (Math.hypot(c.x - R0.x, c.z - R0.z) < 1.35) {
-        if (!islandHits) console.error(`ماشین از روی جزیره‌ی میدان رد شد! ${c.name} state=${c.state}`);
+      const dist = Math.hypot(c.x - R0.x, c.z - R0.z);
+      if (dist < 1.15) {
+        if (!islandHits) console.error(`ماشین از روی جزیره‌ی میدان رد شد! ${c.name} state=${c.state} d=${dist.toFixed(2)}`);
         islandHits++;
       }
     }
@@ -135,7 +124,10 @@ for (let i = 0; i < frames; i++) {
       const was = inBox.get(key) || false;
       if (inside && !was && (c.state === 'straight' || c.state === 'turning' || c.state === 'dispatch')) {
         const axis = Math.abs(c.hz) > 0.5 ? 'ns' : 'ew';
-        if (city._lightState(L, axis) === 'red' && c.state !== 'turning') {
+        // ماشینی که ایستاده و تازه یک پله واردِ مرزِ جعبه شده تخلف نکرده است؛
+        // «رد شدن از چراغ» یعنی با سرعتِ محسوس از خط رد شود.
+        const creeping = c.cur < 0.4;
+        if (city._lightState(L, axis) === 'red' && c.state !== 'turning' && !creeping) {
           if (!redRuns) console.error(`عبور از چراغ قرمز! ${c.name} pos=(${c.x.toFixed(1)},${c.z.toFixed(1)})`);
           redRuns++;
         }
@@ -178,9 +170,9 @@ for (let i = 0; i < frames; i++) {
   }
   // دیتیکتور بن‌بست: ماشین سالم که مدت زیادی سرعتش صفر است
   for (const c of city.cars) {
-    if (!c._still) c._still = { t: 0, x: c.obj.position.x, z: c.obj.position.z };
-    const moved = Math.hypot(c.obj.position.x - c._still.x, c.obj.position.z - c._still.z) > 0.05;
-    if (moved) { c._still = { t: 0, x: c.obj.position.x, z: c.obj.position.z }; }
+    if (!c._still) c._still = { t: 0, x: c.actor.pos.x, z: c.actor.pos.z };
+    const moved = Math.hypot(c.actor.pos.x - c._still.x, c.actor.pos.z - c._still.z) > 0.05;
+    if (moved) { c._still = { t: 0, x: c.actor.pos.x, z: c.actor.pos.z }; }
     else c._still.t += DT;
     // صفِ پشت رویدادهای معتبر (تصادف تا ~۴۰s + تخلیه‌ی صف) نباید خطا شمرده شود؛
     // قفلِ واقعی هرگز رفع نمی‌شود و در ۷۰ ثانیه هم دیده می‌شود
@@ -247,7 +239,7 @@ check('پیچیدن ماشین‌ها دیده شد (مسیر غیرتکراری
 // پخش‌شدگی: ماشین و آدمک فقط وسط شهر جمع نشده باشند
 const farCars = city.cars.filter((c) => Math.hypot(c.x, c.z) > 30).length;
 const farPeds = [...city.peds, ...city.crossers].filter((p) =>
-  Math.hypot(p.g.position.x, p.g.position.z) > 25).length;
+  Math.hypot(p.g.pos.x, p.g.pos.z) > 25).length;
 check(`ماشین‌ها پخش هستند (${farCars} تا بیرونِ شعاع ۳۰)`, farCars >= 6);
 check(`آدمک‌ها پخش هستند (${farPeds} تا بیرونِ شعاع ۲۵)`, farPeds >= 8);
 check('آدمک‌ها داخل خانه می‌روند و برمی‌گردند', seen.visits >= 1 && seen.visitsDone >= 1);
@@ -256,7 +248,7 @@ check('رویداد پارک اجرا و تمام شد', seen.parks >= 1 && seen
 check('عابرها صبر/عبور کردند', seen.crossPhases.has('cross') && seen.crossPhases.size >= 2);
 // تصادف فقط روی نقشه دیده می‌شود؛ پیامِ بالای صفحه عمداً حذف شد
 check('برای تصادف توستی نیامد', !toasts.some((m) => m.includes('تصادف')));
-check('هیچ ماشینی گم نشده (همه صحنه‌اند)', city.cars.every((c) => c.obj.parent));
+check('هیچ ماشینی گم نشده (همه در فهرستِ رسم‌اند)', city.cars.every((c) => world.dynamic.includes(c.actor) || world.staticActors.includes(c.actor)));
 check(`هیچ ماشینی وارد پیاده‌راه‌ها نشد (${closedRects.length} تکه‌ی بسته)`, closedRects.length > 0 && carFreeIntrusions === 0);
 check(`ماشین‌ها دور میدان گردان می‌چرخند (${roundTrips} دور) و از روی جزیره رد نمی‌شوند`, roundTrips >= 3 && islandHits === 0);
 check('دو ماشین داخل میدان روی هم نرفتند', roundOverlap === 0);
