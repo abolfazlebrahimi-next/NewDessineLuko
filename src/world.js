@@ -352,7 +352,9 @@ export class World {
     ctx.globalAlpha = 1;
     const blob = (x, z, w, d, op) => {
       const p = view.screen(x, 0.01, z);
-      const pw = w * view.scale, pd = d * view.scale;
+      // سایه روی زمینِ ایزو کشیده می‌شود، پس پهنای افقیِ آن با √۲ و ارتفاعش با
+      // sin(pitch) جمع می‌شود — وگرنه سایه‌ها مثلِ لکه‌ی گرد و کوچک دیده می‌شوند.
+      const pw = w * view.scale * 1.28, pd = d * view.scale * 1.28 * -CAM_UP.z;
       if (p.x + pw < 0 || p.x - pw > W || p.y + pd < 0 || p.y - pd > H) return;
       ctx.globalAlpha = op == null ? 1 : op;
       ctx.drawImage(this.shadowTex, p.x - pw / 2, p.y - pd / 2, pw, pd);
